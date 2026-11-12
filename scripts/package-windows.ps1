@@ -23,7 +23,9 @@ if (!(Test-Path "$runtime/msvcp140.dll")) { throw "MSVC runtime not found: $runt
 Copy-Item "$runtime/*.dll" $payload
 Copy-Item "$root/LICENSE" "$payload/LICENSE.txt"
 $licenses = New-Item "$payload/licenses" -ItemType Directory -Force
-Copy-Item "$QtDir/licenses/*" $licenses.FullName -Recurse
+Copy-Item "$root/app/assets/licenses/*" $licenses.FullName
+if (Test-Path "$QtDir/licenses") { Copy-Item "$QtDir/licenses/*" $licenses.FullName -Recurse -Force }
+if (Test-Path "$QtDir/sbom") { Copy-Item "$QtDir/sbom" $licenses.FullName -Recurse }
 foreach ($dependency in @('openssl','libxml2','zlib','libiconv')) {
     if (Test-Path "$DepsDir/share/$dependency/copyright") {
         Copy-Item "$DepsDir/share/$dependency/copyright" "$licenses/$dependency.txt"
