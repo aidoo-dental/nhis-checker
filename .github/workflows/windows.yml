@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ['app/**', 'tests/**', 'scripts/**', 'CMakeLists.txt', '.github/workflows/windows.yml']
   push:
-    branches: [main]
+    branches: [main, prototype/windows-webview2]
     paths: ['app/**', 'tests/**', 'scripts/**', 'CMakeLists.txt', '.github/workflows/windows.yml']
 permissions:
   contents: read
@@ -12,6 +12,8 @@ jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 45
+    env:
+      NHIS_WEBVIEW2_PREVIEW: ${{ github.ref == 'refs/heads/prototype/windows-webview2' && 'ON' || 'OFF' }}
     defaults:
       run:
         shell: pwsh
@@ -28,7 +30,7 @@ jobs:
         with:
           version: '6.8.3'
           arch: win64_msvc2022_64
-          modules: 'qtwebengine qtwebchannel qtpositioning'
+          modules: ${{ env.NHIS_WEBVIEW2_PREVIEW == 'OFF' && 'qtwebengine qtwebchannel qtpositioning' || '' }}
           cache: true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -76,17 +78,29 @@ jobs:
             .deps/vcpkg/installed
             .deps/openssl
           key: windows-x64-vcpkg-7cc5ff8-openssl-3.5.9-libxml2
+      - name: Prepare Microsoft WebView2 SDK and bootstrapper
+        if: env.NHIS_WEBVIEW2_PREVIEW == 'ON'
+        run: |
+          $sdk = 'https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3967.48/microsoft.web.webview2.1.0.3967.48.nupkg'
+          Invoke-WebRequest $sdk -OutFile .deps/webview2.zip
+          if ((Get-FileHash .deps/webview2.zip -Algorithm SHA256).Hash -ne 'c66357ac7f324ec9bcafe5241706a023b4122d8c22300c31de4b0eb220db689e') { throw 'WebView2 SDK checksum mismatch' }
+          Expand-Archive .deps/webview2.zip .deps/webview2
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile .deps/MicrosoftEdgeWebview2Setup.exe
       - name: Compile and test
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $deps = (Resolve-Path .deps/vcpkg/installed/x64-windows).Path
           $p11 = (Resolve-Path .deps/libp11-0.4.18/src).Path
           $ssl = (Resolve-Path .deps/openssl).Path
-          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps" "-DOPENSSL_ROOT_DIR=$ssl" "-DLIBP11_INCLUDE_DIR=$p11" "-DLIBP11_LIBRARY=$p11/libp11.lib"
+          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps" "-DOPENSSL_ROOT_DIR=$ssl" "-DLIBP11_INCLUDE_DIR=$p11" "-DLIBP11_LIBRARY=$p11/libp11.lib" "-DNHIS_WEBVIEW2_PREVIEW=$env:NHIS_WEBVIEW2_PREVIEW" "-DWEBVIEW2_SDK_DIR=$PWD/.deps/webview2"
           cmake --build build-win
           $env:PATH = "$ssl/bin;$deps/bin;$p11;$env:PATH"
           ctest --test-dir build-win --output-on-failure
-          ./scripts/package-windows.ps1 -BuildDir build-win -QtDir $env:QT_ROOT_DIR -DepsDir $deps -LibP11Dir .deps/libp11-0.4.18 -OpenSSLDir $ssl
+          $packageArgs = @{}
+          if ($env:NHIS_WEBVIEW2_PREVIEW -eq 'ON') {
+            $packageArgs.WebView2Bootstrapper = '.deps/MicrosoftEdgeWebview2Setup.exe'
+          }
+          ./scripts/package-windows.ps1 -BuildDir build-win -QtDir $env:QT_ROOT_DIR -DepsDir $deps -LibP11Dir .deps/libp11-0.4.18 -OpenSSLDir $ssl @packageArgs
       - name: Test installed app and uninstall
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -94,9 +108,17 @@ jobs:
           $install = Join-Path $env:RUNNER_TEMP 'NHIS Checker installed'
           $p = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Installer failed: $($p.ExitCode)" }
-          node tests/windows-smoke.cjs "$install/NHIS Checker.exe"
+          node tests/windows-smoke.cjs "$install/NHIS Checker.exe" $env:NHIS_WEBVIEW2_PREVIEW
           $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: env.NHIS_WEBVIEW2_PREVIEW == 'ON'
+        with:
+          name: NHIS-Checker-Windows-WebView2-Preview
+          retention-days: 3
+          path: dist/*-WebView2-Preview-Setup.exe
+          if-no-files-found: error
+          compression-level: 0
       - name: Freeze payload for Azure signing
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: Compress-Archive -Path build-win/payload/* -DestinationPath dist/NHIS-Checker-Windows-signing-payload.zip

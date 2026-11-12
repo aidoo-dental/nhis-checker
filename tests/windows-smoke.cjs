@@ -1,11 +1,21 @@
 const {spawn} = require('node:child_process');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   const env = {...process.env, PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`,
     QTWEBENGINE_REMOTE_DEBUGGING: '127.0.0.1:9222'};
   for (const key of ['QT_PLUGIN_PATH','QT_QPA_PLATFORM_PLUGIN_PATH','QML2_IMPORT_PATH','QTWEBENGINEPROCESS_PATH']) delete env[key];
+  const webview2 = process.argv[3] === 'ON';
+  let browserData;
+  if (webview2) {
+    browserData = await fs.mkdtemp(path.join(os.tmpdir(), 'nhis-webview2-smoke-'));
+    env.WEBVIEW2_USER_DATA_FOLDER = browserData;
+    env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222';
+    delete env.QTWEBENGINE_REMOTE_DEBUGGING;
+  }
   const app = spawn(process.argv[2], [], {env, stdio: 'inherit'});
   let ws;
   try {
@@ -14,12 +24,12 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       if (app.exitCode !== null) throw new Error(`App exited with ${app.exitCode}`);
       try {
         const targets = await (await fetch('http://127.0.0.1:9222/json/list')).json();
-        target = targets.find(t => t.type === 'page');
+        target = targets.find(t => t.type === 'page' && (!webview2 || t.url === 'https://nhis-checker.invalid/index.html'));
         if (target) break;
       } catch (e) { lastError = e.message; }
       await delay(500);
     }
-    assert(target, `No WebEngine page: ${lastError}`);
+    assert(target, `No application page: ${lastError}`);
     // Qt exposes page targets; connect directly without full Chrome browser commands.
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve,reject) => {ws.onopen=resolve;ws.onerror=reject;});
@@ -51,6 +61,21 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await delay(500);
     }
     assert(ready,'Native settings bridge did not initialize');
+    if (webview2) {
+      assert(await evaluate("!!window.chrome?.webview && !window.qt?.webChannelTransport"));
+      await evaluate("location.assign('https://outside.invalid/')");
+      await delay(300);
+      assert.equal(await evaluate('location.href'), 'https://nhis-checker.invalid/index.html');
+      const sample = 'Тест на клипборда';
+      await evaluate("desktop('copyErrorLog', {text: " + JSON.stringify(sample) + "})");
+      await send('Page.bringToFront');
+      await evaluate("document.querySelector('#first-name').focus()");
+      const paste = {key:'v', code:'KeyV', windowsVirtualKeyCode:86, modifiers:2};
+      await send('Input.dispatchKeyEvent', {type:'rawKeyDown', ...paste});
+      await send('Input.dispatchKeyEvent', {type:'keyUp', ...paste});
+      assert.equal(await evaluate("document.querySelector('#first-name').value"), sample, 'Clipboard paste into the patient form failed');
+      await evaluate("document.querySelector('#first-name').value = ''");
+    }
     assert(await evaluate(`(async()=>{
       document.querySelector('#open-settings').click();
       await desktop('clearErrorLog');
@@ -108,10 +133,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     const screenshot=await send('Page.captureScreenshot',{format:'png'});
     await fs.writeFile('build-win/windows-installed.png',Buffer.from(screenshot.data,'base64'));
     assert.deepEqual(errors,[]);
-    console.log('PASS: installed app, WebEngine, native bridge, drawer, toast, journal and clear');
+    console.log(`PASS: installed app, ${webview2 ? 'WebView2' : 'WebEngine'}, native bridge, drawer, toast and journal`);
   } finally {
     if(ws)ws.close();
     app.kill();
     await new Promise(resolve=>app.exitCode!==null?resolve():app.once('exit',resolve));
+    if (browserData) {
+      await fs.rm(browserData, {recursive: true, force: true, maxRetries: 8, retryDelay: 250});
+    }
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});
