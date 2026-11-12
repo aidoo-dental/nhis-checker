@@ -19,7 +19,7 @@ void validatePractice(const Practice &practice) {
 }
 
 DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const Practice &practice) {
-    if (patient.first.isEmpty() || patient.last.isEmpty() || patient.identifier.isEmpty() ||
+    if (patient.first.trimmed().isEmpty() || patient.last.trimmed().isEmpty() || patient.identifier.isEmpty() ||
         patient.identifier.size() > 255 || patient.first.size() > 255 || patient.middle.size() > 255 ||
         patient.last.size() > 255 || !QRegularExpression("^[1-6]$").match(patient.identifierType).hasMatch())
         fail(QStringLiteral("Въведи име, фамилия и валиден идентификатор на пациента."));
@@ -149,4 +149,34 @@ void validateDentalResponse(const QDomDocument &document, const DentalMessage &r
     } else if (!QRegularExpression("^[0-9]+$").match(value(contents, "foundNumber")).hasMatch()) {
         fail(QStringLiteral("В отговора на НЗИС липсва валиден брой на намерените лечения."));
     }
+}
+
+void validatePatientIdentity(const QDomDocument &treatments, const PatientQuery &patient) {
+    const auto normalize = [](const QString &name) {
+        return name.normalized(QString::NormalizationForm_C).simplified().toCaseFolded();
+    };
+    const auto unavailable = [] {
+        fail(QStringLiteral("НЗИС не върна достатъчно пациентски данни за проверка на имената и идентификатора. Справката е блокирана."));
+    };
+    const auto root = treatments.documentElement();
+    if (value(child(root, "header"), "messageType") != "D006" ||
+        normalize(patient.first).isEmpty() || normalize(patient.last).isEmpty()) unavailable();
+    const auto contents = child(root, "contents");
+    bool checked = false;
+    for (auto result = contents.firstChildElement(); !result.isNull(); result = result.nextSiblingElement()) {
+        if (result.namespaceURI() != ns || result.localName() != "results") continue;
+        const auto subject = child(result, "subject");
+        const auto name = child(subject, "name");
+        const auto first = normalize(value(name, "given"));
+        const auto last = normalize(value(name, "family"));
+        if (subject.isNull() || first.isEmpty() || last.isEmpty() ||
+            value(subject, "identifierType").isEmpty() || value(subject, "identifier").isEmpty()) unavailable();
+        if (value(subject, "identifierType") != patient.identifierType ||
+            value(subject, "identifier") != patient.identifier ||
+            first != normalize(patient.first) || last != normalize(patient.last) ||
+            (!normalize(patient.middle).isEmpty() && normalize(value(name, "middle")) != normalize(patient.middle)))
+            fail(QStringLiteral("Имената и идентификаторът не съвпадат с пациентските данни, върнати от НЗИС. Провери изписването. Справката е блокирана."));
+        checked = true;
+    }
+    if (!checked) unavailable();
 }

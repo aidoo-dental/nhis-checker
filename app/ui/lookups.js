@@ -57,7 +57,7 @@ async function fetchLookup(view) {
   const lookup = lookups[view];
   lookup.id = '';
   lookup.pending = busy = true;
-  setNotice(view, 'Извличане от НЗИС…', 'loading');
+  setNotice(view, 'Проверка на пациентските данни и извличане от НЗИС…', 'loading');
   updateLookups();
   try {
     const reply = await desktop('lookup', {view, ...readPatient()});

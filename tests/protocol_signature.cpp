@@ -102,6 +102,51 @@ void verifySignature(const QByteArray &xml) {
     expect(documentDigest == digest(canonical(document)), "Enveloped document digest differs");
 }
 
+void verifyIdentity() {
+    const PatientQuery patient{QStringLiteral("Иван"), {}, QStringLiteral("Тестов"), "1", "0000000000"};
+    const auto subject = QStringLiteral(
+        "<subject><identifierType value=\"1\"/><identifier value=\"0000000000\"/>"
+        "<name><given value=\"Иван\"/><middle value=\"Петров\"/><family value=\"Тестов\"/></name></subject>");
+    const auto response = [](const QString &subjects) {
+        return parseNhIs((QStringLiteral("<message xmlns=\"https://www.his.bg\"><header>"
+            "<messageType value=\"D006\"/></header><contents><foundNumber value=\"1\"/>") +
+            subjects + QStringLiteral("</contents></message>")).toUtf8());
+    };
+    const auto one = "<results>" + subject + "</results>";
+    validatePatientIdentity(response(one), patient);
+    auto normalized = patient;
+    normalized.first = QStringLiteral("  ИВАН  ");
+    normalized.last = QStringLiteral("тестов");
+    validatePatientIdentity(response(one), normalized);
+    normalized.middle = QStringLiteral("петров");
+    validatePatientIdentity(response(one), normalized);
+    const auto rejects = [&](const QString &xml, const PatientQuery &query) {
+        try { validatePatientIdentity(response(xml), query); }
+        catch (const std::runtime_error &error) {
+            expect(!QString::fromUtf8(error.what()).contains(QStringLiteral("Тестов")),
+                   "A blocked lookup must not disclose returned patient names");
+            return;
+        }
+        throw std::runtime_error("Unverified patient identity was accepted");
+    };
+    auto wrong = patient;
+    wrong.last = QStringLiteral("Тест");
+    rejects(one, wrong);
+    wrong = patient; wrong.first = QStringLiteral("Друг"); rejects(one, wrong);
+    wrong = patient; wrong.first = QStringLiteral("   "); rejects(one, wrong);
+    wrong = patient; wrong.identifier = "0000000001"; rejects(one, wrong);
+    wrong = patient; wrong.identifierType = "2"; rejects(one, wrong);
+    wrong = patient; wrong.middle = QStringLiteral("Друг"); rejects(one, wrong);
+    rejects({}, patient);
+    rejects("<results/>", patient);
+    auto missing = one; missing.replace(QStringLiteral("<given value=\"Иван\"/>"), QString());
+    rejects(missing, patient);
+    auto mismatched = one; mismatched.replace("0000000000", "0000000001");
+    rejects(one + mismatched, patient); // Every result must belong to the same named patient.
+    auto foreignNamespace = one; foreignNamespace.replace("<subject>", "<subject xmlns=\"urn:other\">");
+    rejects(foreignNamespace, patient);
+}
+
 void verifyProtocol() {
     const PatientQuery patient{QStringLiteral("Иван & Мария"), {}, QStringLiteral("Тестови"), "4", "ABC\"123"};
     const Practice practice{"012345678", "0012345678"};
@@ -168,6 +213,7 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     try {
         verifyProtocol();
+        verifyIdentity();
     } catch (const std::exception &error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 1;

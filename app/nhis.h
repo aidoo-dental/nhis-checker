@@ -11,8 +11,9 @@ public:
     void lock();
     QString checkSignature(QWidget *parent, const QString &driver, bool remember);
     QByteArray lookup(QWidget *parent, const DentalMessage &message, bool production,
-                      const QString &driver, bool remember);
+                      const QString &driver, bool remember, const PatientQuery &patient, const Practice &practice);
 private:
+    QByteArray requestDental(const DentalMessage &message, bool production);
     struct Response { int status; QByteArray body; };
     Response send(const QUrl &url, const QByteArray &body = {}, const QByteArray &bearer = {});
     QByteArray accessToken(bool production);

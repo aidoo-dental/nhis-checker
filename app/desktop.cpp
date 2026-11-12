@@ -96,7 +96,7 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
         const Practice practice{prefs.value("lpk").toString(), prefs.value("practice").toString()};
         const auto request = makeDentalMessage(view == "status", patient, practice);
         auto xml = client.lookup(window, request, prefs.value("environment") == "production",
-                                 prefs.value("driver").toString(), prefs.value("remember").toBool());
+                                 prefs.value("driver").toString(), prefs.value("remember").toBool(), patient, practice);
         const auto text = QString::fromUtf8(xml);
         responses.insert(view, {request.id, request.replyType, std::move(xml)});
         return {{"id", request.id}, {"xml", text}};

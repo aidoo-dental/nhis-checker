@@ -22,3 +22,4 @@ QDomElement child(const QDomElement &parent, const QString &name);
 QString value(const QDomElement &parent, const QString &name);
 QString nhisResponseError(const QDomDocument &document);
 void validateDentalResponse(const QDomDocument &document, const DentalMessage &request);
+void validatePatientIdentity(const QDomDocument &treatments, const PatientQuery &patient);

@@ -158,9 +158,20 @@ QByteArray NhisClient::accessToken(bool production) {
 }
 
 QByteArray NhisClient::lookup(QWidget *parent, const DentalMessage &message, bool production,
-                             const QString &driver, bool remember) {
+                             const QString &driver, bool remember, const PatientQuery &patient, const Practice &practice) {
     const auto cleanup = qScopeGuard([&] { closeIfExpired(remember); });
     unlock(parent, driver, remember);
+    // D010 has no subject; verify D006 before requesting any status data.
+    if (message.type == "D009") {
+        const auto identity = requestDental(makeDentalMessage(false, patient, practice), production);
+        validatePatientIdentity(parseNhIs(identity), patient);
+    }
+    const auto result = requestDental(message, production);
+    if (message.type == "D005") validatePatientIdentity(parseNhIs(result), patient);
+    return result;
+}
+
+QByteArray NhisClient::requestDental(const DentalMessage &message, bool production) {
     const auto api = QString(production ? "https://api.his.bg" : "https://ptest-api.his.bg") + message.route;
     QByteArray signedRequest;
     try {
