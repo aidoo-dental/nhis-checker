@@ -20,11 +20,11 @@
 | :--- | :--- | :--- |
 | [NHIS Checker 1.0.12 — Apple Silicon.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Apple.Silicon.dmg) | Mac с Apple Silicon, macOS 12.0+ | Отваря диск с приложението. Премести **NHIS Checker** в **Applications**. |
 | [NHIS Checker 1.0.12 — Intel.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Intel.dmg) | Mac с Intel, macOS 12.0+ | Същото приложение, компилирано за Intel. Премести го в **Applications**. |
-| **Windows x64 Setup.exe — подписването се довършва** | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
+| [NHIS Checker 1.0.12 — Windows x64 Setup.exe](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Windows.x64.Setup.exe) | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
 
 На Mac провери процесора от ** → About This Mac / За този Mac**. Драйверът за КЕП трябва да съответства на архитектурата на приложението; за Windows е нужен 64-битов драйвер от доставчика.
 
-**Подписване:** Mac приложението и DMG файловете са подписани с Developer ID на **Aidoo Ltd. OOD** и нотариализирани от Apple. Windows приложението, инсталаторът и деинсталаторът се подписват чрез **Azure Artifact Signing**, с издател **Aidoo LTD** и времеви печат.
+**Подписване:** Mac приложението и DMG файловете са подписани с Developer ID на **Aidoo Ltd. OOD** и нотариализирани от Apple. Windows приложението, инсталаторът и деинсталаторът са подписани чрез **Azure Artifact Signing**, с издател **Aidoo LTD** и времеви печат.
 
 [Всички версии и бележки към изданията →](https://github.com/aidoo-dental/nhis-checker/releases)
 

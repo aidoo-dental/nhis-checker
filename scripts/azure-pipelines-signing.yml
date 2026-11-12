@@ -66,7 +66,7 @@ steps:
       $p = Start-Process $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$installed`"") -Wait -PassThru
       if ($p.ExitCode -ne 0) { throw "Installation failed: $($p.ExitCode)" }
       $signatures = foreach ($path in @($setup,"$installed/NHIS Checker.exe","$installed/unins000.exe")) {
-        & '$(NHIS_SIGNTOOL)' verify /pa /all /v $path
+        & '$(NHIS_SIGNTOOL)' verify /pa /all /v $path | Out-Host
         $s = Get-AuthenticodeSignature -LiteralPath $path
         if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -cne 'CN=Aidoo LTD, O=Aidoo LTD, L=Sofia, S=Sofia City, C=BG' -or !$s.TimeStamperCertificate) { throw 'Invalid AIDOO signature' }
         @{file=[IO.Path]::GetFileName($path);sha256=(Get-FileHash $path -Algorithm SHA256).Hash;publisher=$s.SignerCertificate.Subject;timestamp=$s.TimeStamperCertificate.Subject;status=$s.Status.ToString()}

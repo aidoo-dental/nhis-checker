@@ -1,0 +1,30 @@
+{
+  "sourceCommit": "77b68d00c341233171025ee4f1e6553001f5a59d",
+  "uninstall": "passed",
+  "signatures": [
+    {
+      "status": "Valid",
+      "timestamp": "CN=Microsoft Public RSA Time Stamping Authority, OU=nShield TSS ESN:7B1A-05E0-D947, OU=Microsoft Ireland Operations Limited, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "sha256": "C22BBCEA5AB5C266C13DFB06D653189E2AD78C94FF1C8EDC193D01611E88D05E",
+      "publisher": "CN=Aidoo LTD, O=Aidoo LTD, L=Sofia, S=Sofia City, C=BG",
+      "file": "NHIS Checker 1.0.12 - Windows x64 Setup.exe"
+    },
+    {
+      "status": "Valid",
+      "timestamp": "CN=Microsoft Public RSA Time Stamping Authority, OU=nShield TSS ESN:7A1A-05E0-D947, OU=Microsoft Ireland Operations Limited, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "sha256": "771B8187B64A5CFC69B3E55BAC395F298C173DAFF09E696029F0C7A1A7B2D382",
+      "publisher": "CN=Aidoo LTD, O=Aidoo LTD, L=Sofia, S=Sofia City, C=BG",
+      "file": "NHIS Checker.exe"
+    },
+    {
+      "status": "Valid",
+      "timestamp": "CN=Microsoft Public RSA Time Stamping Authority, OU=nShield TSS ESN:7A1A-05E0-D947, OU=Microsoft Ireland Operations Limited, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "sha256": "ED8E3AFEB1786B049A32E78850BE0CA145AB64BD1BB57E8601DD9B050F1A6C9F",
+      "publisher": "CN=Aidoo LTD, O=Aidoo LTD, L=Sofia, S=Sofia City, C=BG",
+      "file": "unins000.exe"
+    }
+  ],
+  "installedSmokeTest": "passed",
+  "payloadSha256": "a722f4a95c61d8a4dc1172d419b60ee3d0665f379d56aac364dee5bb585ba390",
+  "version": "1.0.12"
+}
