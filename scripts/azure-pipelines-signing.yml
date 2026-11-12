@@ -1,0 +1,80 @@
+# Queue manually on an isolated Azure Repos branch with the tested payload hash.
+trigger: none
+pr: none
+parameters:
+  - name: payloadUrl
+    type: string
+  - name: payloadSha256
+    type: string
+  - name: sourceCommit
+    type: string
+  - name: version
+    type: string
+    default: '1.0.11'
+pool:
+  vmImage: windows-2022
+steps:
+  - checkout: self
+    persistCredentials: false
+  - task: NodeTool@0
+    inputs:
+      versionSpec: 22.x
+  - task: UseDotNet@2
+    inputs:
+      packageType: runtime
+      version: 8.0.x
+  - pwsh: |
+      ./scripts/prepare-azure-tools.ps1 -Directory "$(Agent.TempDirectory)/nhis-sign-tools"
+      $url = '${{ parameters.payloadUrl }}'
+      if ($url -notmatch '^https://github.com/aidoo-dental/nhis-checker/releases/download/v[0-9.]+/NHIS-Checker-[0-9.]+-Windows-signing-payload.zip$') { throw 'Unexpected payload source' }
+      $hash = '${{ parameters.payloadSha256 }}'
+      if ($hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid expected hash' }
+      Invoke-WebRequest $url -OutFile payload.zip
+      if ((Get-FileHash payload.zip -Algorithm SHA256).Hash -ne $hash) { throw 'Payload checksum mismatch' }
+      Expand-Archive payload.zip payload
+      if ((Get-Item 'payload/NHIS Checker.exe').VersionInfo.ProductVersion -ne '${{ parameters.version }}') { throw 'Unexpected version' }
+    displayName: Verify frozen payload and Microsoft signing tools
+  - task: AzureCLI@2
+    displayName: Sign application, uninstaller and installer through Azure
+    inputs:
+      azureSubscription: AIDOO-ArtifactSigning
+      scriptType: pscore
+      scriptLocation: inlineScript
+      addSpnToEnvironment: false
+      useGlobalConfig: false
+      visibleAzLogin: false
+      inlineScript: |
+        $ErrorActionPreference = 'Stop'
+        $env:NHIS_SIGNTOOL = '$(NHIS_SIGNTOOL)'
+        $env:NHIS_DLIB = '$(NHIS_DLIB)'
+        $env:NHIS_SIGNING_METADATA = (Resolve-Path 'scripts/azure-signing-metadata.json').Path
+        ./scripts/sign-windows-azure.ps1 -Path "$pwd/payload/NHIS Checker.exe"
+        $iscc = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
+        if (!(Test-Path $iscc)) { throw 'Inno Setup 6 missing' }
+        New-Item dist -ItemType Directory -Force | Out-Null
+        $signCommand = 'pwsh.exe -NoProfile -File "' + "$pwd/scripts/sign-windows-azure.ps1" + '" -Path $f'
+        & $iscc '/DSignWithAzure' "/Saidoo=$signCommand" '/DAppVersion=${{ parameters.version }}' "/DPayloadDir=$pwd/payload" "/DOutputDir=$pwd/dist" scripts/windows-installer.iss
+        if ($LASTEXITCODE -ne 0) { throw 'Signed installer creation failed' }
+  - pwsh: |
+      $ErrorActionPreference = 'Stop'
+      $PSNativeCommandUseErrorActionPreference = $true
+      $setup = (Get-ChildItem 'dist/*Setup.exe').FullName
+      $installed = "$(Agent.TempDirectory)/NHIS Checker installed"
+      $p = Start-Process $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$installed`"") -Wait -PassThru
+      if ($p.ExitCode -ne 0) { throw "Installation failed: $($p.ExitCode)" }
+      $signatures = foreach ($path in @($setup,"$installed/NHIS Checker.exe","$installed/unins000.exe")) {
+        & '$(NHIS_SIGNTOOL)' verify /pa /all /v $path
+        $s = Get-AuthenticodeSignature -LiteralPath $path
+        if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -cne 'CN=Aidoo LTD, O=Aidoo LTD, L=Sofia, S=Sofia City, C=BG' -or !$s.TimeStamperCertificate) { throw 'Invalid AIDOO signature' }
+        @{file=[IO.Path]::GetFileName($path);sha256=(Get-FileHash $path -Algorithm SHA256).Hash;publisher=$s.SignerCertificate.Subject;timestamp=$s.TimeStamperCertificate.Subject;status=$s.Status.ToString()}
+      }
+      node tests/windows-smoke.cjs "$installed/NHIS Checker.exe"
+      $p = Start-Process "$installed/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+      if ($p.ExitCode -ne 0 -or (Test-Path "$installed/NHIS Checker.exe")) { throw 'Uninstall failed' }
+      @{version='${{ parameters.version }}';sourceCommit='${{ parameters.sourceCommit }}';payloadSha256='${{ parameters.payloadSha256 }}';signatures=$signatures;installedSmokeTest='passed';uninstall='passed'} | ConvertTo-Json -Depth 6 | Set-Content dist/windows-signing-report.json
+      Copy-Item '$(Agent.TempDirectory)/nhis-sign-tools/tools.json' dist/signing-tools.json
+    displayName: Verify signatures and test the installed application
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: dist
+      artifact: NHIS-Checker-signed-Windows

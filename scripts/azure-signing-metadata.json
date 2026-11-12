@@ -1,0 +1,6 @@
+{
+  "Endpoint": "https://neu.codesigning.azure.net/",
+  "CodeSigningAccountName": "aidooartifactsigning",
+  "CertificateProfileName": "aidoo-whisper-lite",
+  "ExcludeCredentials": ["EnvironmentCredential", "WorkloadIdentityCredential", "ManagedIdentityCredential", "SharedTokenCacheCredential", "VisualStudioCredential", "VisualStudioCodeCredential", "AzurePowerShellCredential", "AzureDeveloperCliCredential", "InteractiveBrowserCredential"]
+}
