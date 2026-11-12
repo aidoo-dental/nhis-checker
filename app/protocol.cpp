@@ -1,0 +1,152 @@
+#include "protocol.h"
+#include "error.h"
+#include <QDateTime>
+#include <QRegularExpression>
+#include <QStringList>
+#include <QTimeZone>
+#include <QUuid>
+#include <QXmlStreamWriter>
+
+namespace {
+const QString ns = QStringLiteral("https://www.his.bg");
+}
+
+void validatePractice(const Practice &practice) {
+    if (!QRegularExpression("^[0-9]{9}$").match(practice.lpk).hasMatch())
+        fail(QStringLiteral("Въведи 9-цифрения ЛПК на стоматолога в „Настройки“."));
+    if (!QRegularExpression("^[0-9]{10}$").match(practice.registration).hasMatch())
+        fail(QStringLiteral("Въведи 10-цифрения РЗИ номер на практиката в „Настройки“."));
+}
+
+DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const Practice &practice) {
+    if (patient.first.isEmpty() || patient.last.isEmpty() || patient.identifier.isEmpty() ||
+        patient.identifier.size() > 255 || patient.first.size() > 255 || patient.middle.size() > 255 ||
+        patient.last.size() > 255 || !QRegularExpression("^[1-6]$").match(patient.identifierType).hasMatch())
+        fail(QStringLiteral("Въведи име, фамилия и валиден идентификатор на пациента."));
+    if ((patient.identifierType == "1" || patient.identifierType == "2") &&
+        !QRegularExpression("^[0-9]{10}$").match(patient.identifier).hasMatch())
+        fail(QStringLiteral("ЕГН и ЛНЧ се въвеждат като 10 цифри."));
+    validatePractice(practice);
+
+    DentalMessage result;
+    result.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    result.type = status ? "D009" : "D005";
+    result.replyType = status ? "D010" : "D006";
+    result.route = status ? "/v1/edental/status/get" : "/v1/edental/record/fetch";
+    const auto now = QDateTime::currentDateTimeUtc().toTimeZone(QTimeZone("Europe/Sofia"));
+    QXmlStreamWriter xml(&result.xml);
+    const auto field = [&](const QString &name, const QString &value) {
+        xml.writeEmptyElement("nhis:" + name);
+        xml.writeAttribute("value", value);
+    };
+    xml.writeStartDocument();
+    xml.writeStartElement("nhis:message");
+    xml.writeNamespace(ns, "nhis");
+    xml.writeNamespace("http://www.w3.org/2001/XMLSchema-instance", "xsi");
+    xml.writeAttribute("xsi:schemaLocation", ns + " " + ns + "/api/v1/NHIS-" + result.type + ".xsd");
+    xml.writeStartElement("nhis:header");
+    field("sender", "2");
+    field("senderId", practice.lpk);
+    field("senderISName", "NZIS Spravki " APP_VERSION);
+    field("recipient", "4");
+    field("recipientId", "NHIS");
+    field("messageId", result.id);
+    field("messageType", result.type);
+    field("createdOn", now.toString(Qt::ISODate));
+    xml.writeEndElement();
+    xml.writeStartElement("nhis:contents");
+    field("identifierType", patient.identifierType);
+    field("identifier", patient.identifier);
+    if (status) {
+        field("fromDate", "2008-01-01");
+        field("toDate", now.date().toString(Qt::ISODate));
+        field("practiceNumber", practice.registration);
+    }
+    xml.writeEndElement();
+    xml.writeEndElement();
+    xml.writeEndDocument();
+    if (xml.hasError()) fail(QStringLiteral("Неуспешно създаване на XML заявката."));
+    return result;
+}
+
+QDomDocument tryParseNhIs(const QByteArray &xml) {
+    if (xml.isEmpty() || xml.contains('\0') || xml.contains("<!DOCTYPE"))
+        return {};
+    // Qt's parser accepts XML 1.0. НЗИС can declare 1.1 for the same UTF-8 payload.
+    static const QRegularExpression version11(R"re(\A<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(['"])(1\.1)\1)re");
+    const qsizetype bom = xml.startsWith("\xef\xbb\xbf") ? 3 : 0;
+    const auto prolog = QString::fromLatin1(xml.constData() + bom, qMin(qsizetype(128), xml.size() - bom));
+    const auto version = version11.match(prolog);
+    QByteArray readable = xml;
+    if (version.hasMatch()) readable.replace(bom + version.capturedStart(2), 3, "1.0");
+    QDomDocument document;
+    if (!document.setContent(readable, QDomDocument::ParseOption::UseNamespaceProcessing) ||
+        document.documentElement().localName() != "message" || document.documentElement().namespaceURI() != ns)
+        return {};
+    return document;
+}
+
+QDomDocument parseNhIs(const QByteArray &xml) {
+    if (xml.isEmpty()) fail(QStringLiteral("НЗИС върна празен отговор. Повтори справката."));
+    auto document = tryParseNhIs(xml);
+    if (document.isNull()) fail(QStringLiteral("НЗИС върна отговор в неочакван формат. Очаква се XML съобщение."));
+    return document;
+}
+
+QDomElement child(const QDomElement &parent, const QString &name) {
+    for (auto node = parent.firstChildElement(); !node.isNull(); node = node.nextSiblingElement())
+        if (node.localName() == name && node.namespaceURI() == ns) return node;
+    return {};
+}
+
+QString value(const QDomElement &parent, const QString &name) {
+    return child(parent, name).attribute("value");
+}
+
+QString nhisResponseError(const QDomDocument &document) {
+    const auto root = document.documentElement();
+    const auto type = value(child(root, "header"), "messageType");
+    if (type.size() != 4 || !type.endsWith("099")) return {};
+
+    QStringList lines{QStringLiteral("НЗИС върна грешка (%1).").arg(type)};
+    const auto contents = child(root, "contents");
+    for (auto error = contents.firstChildElement(); !error.isNull(); error = error.nextSiblingElement()) {
+        if (error.namespaceURI() != ns || error.localName() != "error") continue;
+
+        QStringList details;
+        const auto code = value(error, "type").simplified().left(20);
+        if (!code.isEmpty()) details << QStringLiteral("Код %1").arg(code);
+        for (auto field = error.firstChildElement(); !field.isNull(); field = field.nextSiblingElement()) {
+            if (field.namespaceURI() != ns) continue;
+            const auto name = field.localName();
+            if (name != "reason" && name != "description") continue;
+            const auto text = field.attribute("value").simplified().left(2000);
+            if (!text.isEmpty() && !details.contains(text)) details << text;
+        }
+        const auto attribute = value(error, "faultyAttribute").simplified().left(255);
+        if (!attribute.isEmpty()) details << QStringLiteral("Поле %1").arg(attribute);
+        if (!details.isEmpty()) lines << details.join(QStringLiteral(" · "));
+    }
+    return lines.join('\n');
+}
+
+void validateDentalResponse(const QDomDocument &document, const DentalMessage &request) {
+    if (const auto rejection = nhisResponseError(document); !rejection.isEmpty())
+        fail(rejection);
+    const auto root = document.documentElement();
+    const auto header = child(root, "header");
+    const auto type = value(header, "messageType");
+    if (type.isEmpty()) fail(QStringLiteral("В XML отговора на НЗИС липсва типът на съобщението."));
+    if (type != request.replyType)
+        fail(QStringLiteral("НЗИС върна неочакван тип отговор (%1). Очаква се %2.").arg(type.left(20), request.replyType));
+    if (value(header, "messageId") != request.id)
+        fail(QStringLiteral("Отговорът на НЗИС е за друга заявка. Повтори справката."));
+
+    const auto contents = child(root, "contents");
+    if (type == "D010") {
+        if (child(contents, "dentalStatus").isNull())
+            fail(QStringLiteral("В отговора на НЗИС липсва денталният статус."));
+    } else if (!QRegularExpression("^[0-9]+$").match(value(contents, "foundNumber")).hasMatch()) {
+        fail(QStringLiteral("В отговора на НЗИС липсва валиден брой на намерените лечения."));
+    }
+}
