@@ -20,7 +20,7 @@
 | :--- | :--- | :--- |
 | [NHIS Checker 1.0.12 — Apple Silicon.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Apple.Silicon.dmg) | Mac с Apple Silicon, macOS 12.0+ | Отваря диск с приложението. Премести **NHIS Checker** в **Applications**. |
 | [NHIS Checker 1.0.12 — Intel.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Intel.dmg) | Mac с Intel, macOS 12.0+ | Същото приложение, компилирано за Intel. Премести го в **Applications**. |
-| [NHIS Checker 1.0.12 — Windows x64 Setup.exe](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Windows.x64.Setup.exe) | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
+| **Windows x64 Setup.exe — подписването се довършва** | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
 
 На Mac провери процесора от ** → About This Mac / За този Mac**. Драйверът за КЕП трябва да съответства на архитектурата на приложението; за Windows е нужен 64-битов драйвер от доставчика.
 
