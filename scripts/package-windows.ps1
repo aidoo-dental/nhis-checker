@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$QtDir,
     [Parameter(Mandatory)][string]$DepsDir,
     [Parameter(Mandatory)][string]$LibP11Dir,
+    [string]$OpenSSLDir = $DepsDir,
     [string]$OutputDir = "$PSScriptRoot/../dist"
 )
 $ErrorActionPreference = 'Stop'
@@ -16,6 +17,11 @@ cmake --install $BuildDir --config Release --prefix $payload
 $exe = Join-Path $payload 'NHIS Checker.exe'
 & "$QtDir/bin/windeployqt.exe" --release --no-compiler-runtime $exe
 Copy-Item "$DepsDir/bin/*.dll" $payload
+if ($OpenSSLDir -ne $DepsDir) {
+    foreach ($library in @('libssl-3-x64.dll','libcrypto-3-x64.dll')) {
+        Copy-Item "$OpenSSLDir/bin/$library" $payload
+    }
+}
 Copy-Item "$LibP11Dir/src/libp11.dll" $payload
 # Deploy the MSVC runtime beside the app, avoiding an elevated prerequisite installer.
 $runtime = Join-Path $env:VCToolsRedistDir 'x64/Microsoft.VC143.CRT'
@@ -26,7 +32,10 @@ $licenses = New-Item "$payload/licenses" -ItemType Directory -Force
 Copy-Item "$root/app/assets/licenses/*" $licenses.FullName
 if (Test-Path "$QtDir/licenses") { Copy-Item "$QtDir/licenses/*" $licenses.FullName -Recurse -Force }
 if (Test-Path "$QtDir/sbom") { Copy-Item "$QtDir/sbom" $licenses.FullName -Recurse }
-foreach ($dependency in @('openssl','libxml2','zlib','libiconv')) {
+if (Test-Path "$OpenSSLDir/share/openssl/copyright") {
+    Copy-Item "$OpenSSLDir/share/openssl/copyright" "$licenses/openssl.txt"
+}
+foreach ($dependency in @('libxml2','zlib','libiconv')) {
     if (Test-Path "$DepsDir/share/$dependency/copyright") {
         Copy-Item "$DepsDir/share/$dependency/copyright" "$licenses/$dependency.txt"
     }

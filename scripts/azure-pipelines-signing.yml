@@ -1,14 +1,6 @@
-# Queue manually on an isolated Azure Repos branch with the tested payload hash.
+# Use a protected Azure Repos branch with a reviewed signing-approval.json.
 trigger: none
 pr: none
-parameters:
-  - name: payloadSha256
-    type: string
-  - name: sourceCommit
-    type: string
-  - name: version
-    type: string
-    default: '1.0.12'
 pool:
   vmImage: windows-2022
 steps:
@@ -22,21 +14,19 @@ steps:
       packageType: runtime
       version: 8.0.x
   - pwsh: |
-      ./scripts/prepare-azure-tools.ps1 -Directory "$(Agent.TempDirectory)/nhis-sign-tools"
-      $url = $env:NHIS_PAYLOAD_URL
-      $uri = [uri]$url
-      if ($uri.Scheme -ne 'https' -or $uri.Host -notmatch '^productionresultssa[0-9]+\.blob\.core\.windows\.net$') { throw 'Unexpected artifact source' }
-      $hash = '${{ parameters.payloadSha256 }}'
-      if ($hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid expected hash' }
-      try { Invoke-WebRequest $url -OutFile artifact.zip } catch { throw 'Could not download the frozen GitHub artifact' }
-      if ((Get-FileHash artifact.zip -Algorithm SHA256).Hash -ne $hash) { throw 'Artifact checksum mismatch' }
+      $ErrorActionPreference = 'Stop'
+      $PSNativeCommandUseErrorActionPreference = $true
+      node scripts/verify-windows-payload.mjs
+      $approval = Get-Content signing-approval.json -Raw | ConvertFrom-Json
       Expand-Archive artifact.zip artifact
       Move-Item artifact/NHIS-Checker-Windows-signing-payload.zip payload.zip
       Expand-Archive payload.zip payload
-      if ((Get-Item 'payload/NHIS Checker.exe').VersionInfo.ProductVersion -ne '${{ parameters.version }}') { throw 'Unexpected version' }
-    displayName: Verify frozen payload and Microsoft signing tools
+      if ((Get-Item 'payload/NHIS Checker.exe').VersionInfo.ProductVersion -ne $approval.version) { throw 'Unexpected version' }
+    displayName: Verify approved GitHub artifact
     env:
-      NHIS_PAYLOAD_URL: $(nhisPayloadUrl)
+      NHIS_GITHUB_TOKEN: $(nhisGithubReadToken)
+  - pwsh: ./scripts/prepare-azure-tools.ps1 -Directory "$(Agent.TempDirectory)/nhis-sign-tools"
+    displayName: Verify Microsoft signing tools
   - task: AzureCLI@2
     displayName: Sign application, uninstaller and installer through Azure
     inputs:
@@ -56,7 +46,8 @@ steps:
         if (!(Test-Path $iscc)) { throw 'Inno Setup 6 missing' }
         New-Item dist -ItemType Directory -Force | Out-Null
         $signCommand = 'pwsh.exe -NoProfile -File $q' + "$pwd/scripts/sign-windows-azure.ps1" + '$q -Path $f'
-        & $iscc '/DSignWithAzure' "/Saidoo=$signCommand" '/DAppVersion=${{ parameters.version }}' "/DPayloadDir=$pwd/payload" "/DOutputDir=$pwd/dist" scripts/windows-installer.iss
+        $version = (Get-Content signing-approval.json -Raw | ConvertFrom-Json).version
+        & $iscc '/DSignWithAzure' "/Saidoo=$signCommand" "/DAppVersion=$version" "/DPayloadDir=$pwd/payload" "/DOutputDir=$pwd/dist" scripts/windows-installer.iss
         if ($LASTEXITCODE -ne 0) { throw 'Signed installer creation failed' }
   - pwsh: |
       $ErrorActionPreference = 'Stop'
@@ -74,7 +65,8 @@ steps:
       node tests/windows-smoke.cjs "$installed/NHIS Checker.exe"
       $p = Start-Process "$installed/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
       if ($p.ExitCode -ne 0 -or (Test-Path "$installed/NHIS Checker.exe")) { throw 'Uninstall failed' }
-      @{version='${{ parameters.version }}';sourceCommit='${{ parameters.sourceCommit }}';payloadSha256='${{ parameters.payloadSha256 }}';signatures=$signatures;installedSmokeTest='passed';uninstall='passed'} | ConvertTo-Json -Depth 6 | Set-Content dist/windows-signing-report.json
+      $approval = Get-Content signing-approval.json -Raw | ConvertFrom-Json
+      @{version=$approval.version;sourceCommit=$approval.commit;payloadSha256=$approval.digest.Substring(7);githubRunId=$approval.runId;githubArtifactId=$approval.artifactId;signatures=$signatures;installedSmokeTest='passed';uninstall='passed'} | ConvertTo-Json -Depth 6 | Set-Content dist/windows-signing-report.json
       Copy-Item '$(Agent.TempDirectory)/nhis-sign-tools/tools.json' dist/signing-tools.json
     displayName: Verify signatures and test the installed application
   - task: PublishPipelineArtifact@1

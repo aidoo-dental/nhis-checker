@@ -189,6 +189,9 @@ input,select { width:100%; min-height:35px; border:1px solid #d7d7d7; border-rad
 @keyframes drawer-enter { from { transform:translateX(100%) } to { transform:translateX(0) } }
 @keyframes toast-enter { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
 @media(prefers-reduced-motion:reduce) { .settings-drawer[open],.toast { animation:none } }
+.settings-drawer:not([open]) { display:none }
+.settings-backdrop { position:fixed; inset:0; background:rgb(0 0 0 / .22); z-index:9 }
+.settings-backdrop:not([hidden]) + .settings-drawer { z-index:10 }
 dialog::backdrop { background:rgb(0 0 0 / .22) }
 @media(max-width:660px) {
   main > [role="tabpanel"] { padding-top:20px }

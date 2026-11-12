@@ -127,12 +127,14 @@ function renderOdontogram(statuses) {
   hideToothTooltip();
   get('upper').replaceChildren();
   get('lower').replaceChildren();
+  const displayed = new Set();
   for (const [index, teeth] of quadrants.entries()) {
     const quadrant = document.createElement('div');
     quadrant.className = 'quad';
     for (const permanent of teeth) {
       const temporary = [5,6,8,7][index] * 10 + permanent % 10;
       const tooth = permanent % 10 <= 5 && statuses.has(String(temporary)) && !statuses.has(String(permanent)) ? temporary : permanent;
+      displayed.add(String(tooth));
       const codes = statuses.get(String(tooth)) ?? [];
       const button = document.createElement('button');
       button.type = 'button';
@@ -148,16 +150,30 @@ function renderOdontogram(statuses) {
         if (event.pointerType !== 'touch') showToothTooltip(button, tooth, codes);
       });
       button.addEventListener('pointerleave', () => {
-        if (!button.matches(':focus-visible')) hideToothTooltip(button);
+        if (document.activeElement !== button) hideToothTooltip(button);
       });
       button.addEventListener('focus', () => {
-        if (button.matches(':focus-visible')) showToothTooltip(button, tooth, codes);
+        showToothTooltip(button, tooth, codes);
       });
       button.addEventListener('blur', () => hideToothTooltip(button));
       quadrant.append(button);
     }
     get(index < 2 ? 'upper' : 'lower').append(quadrant);
   }
+  const additional = get('additional-teeth');
+  additional.replaceChildren();
+  for (const [tooth, codes] of statuses) {
+    if (displayed.has(tooth)) continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'control tooth';
+    button.textContent = tooth;
+    button.setAttribute('aria-label', 'Зъб ' + tooth + (codes.length ? ', ' + codes.join(', ') : ', няма подаден статус'));
+    button.setAttribute('aria-pressed', String(tooth === selectedTooth));
+    button.addEventListener('click', () => selectTooth(button, tooth, codes));
+    additional.append(button);
+  }
+  get('additional-teeth-section').hidden = additional.childElementCount === 0;
 }
 function showDentitionDate(date) {
   const statuses = dentitionByDate.get(date);
@@ -197,7 +213,7 @@ function renderDentitionTimeline() {
 
 function displayDentition({current, history, date}) {
   selectedTooth = null;
-  chartDate = date || [...current.map(tooth => tooth.date), ...history.map(item => item.date.slice(0, 10))].sort().at(-1) || '';
+  chartDate = date || [...current.map(tooth => tooth.date), ...history.map(item => item.date.slice(0, 10))].sort().pop() || '';
   const updates = new Map();
   const record = (day, tooth) => {
     if (!day || (chartDate && day > chartDate)) return;
@@ -213,14 +229,7 @@ function displayDentition({current, history, date}) {
   dentitionByDate = new Map();
   const known = new Map();
   for (const [day, teeth] of [...updates].sort(([a], [b]) => a.localeCompare(b))) {
-    for (const [tooth, codes] of teeth) {
-      // The FDI numbers for primary and permanent teeth at the same position differ by 40.
-      if (/^[1-8][1-5]$/.test(tooth)) {
-        const number = Number(tooth);
-        known.delete(String(number < 50 ? number + 40 : number - 40));
-      }
-      known.set(tooth, codes);
-    }
+    for (const [tooth, codes] of teeth) known.set(tooth, codes);
     dentitionByDate.set(day, new Map(known));
   }
   dentitionByDate.set(chartDate, new Map(current.filter(tooth => tooth.fdi).map(tooth => [tooth.fdi, tooth.conditions])));

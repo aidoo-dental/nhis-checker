@@ -190,8 +190,10 @@ function renderRecords() {
   const rows = get('records');
   rows.replaceChildren();
   get('records-count').textContent = 'Намерени лечения (' + foundTreatmentCount + ')';
-  get('records-filtered').textContent = matching.length < foundTreatmentCount
-    ? 'Показани ' + matching.length + ' от ' + foundTreatmentCount : '';
+  get('records-limit').textContent = records.length < foundTreatmentCount
+    ? 'НЗИС върна ' + records.length + ' от ' + foundTreatmentCount + ' лечения. Справката е непълна.' : '';
+  get('records-filtered').textContent = matching.length < records.length
+    ? 'Филтрирани: ' + matching.length + ' от ' + records.length + ' получени лечения.' : '';
   get('no-records').hidden = matching.length !== 0;
   const entries = matching.flatMap(({record, procedures}, recordIndex) =>
     procedures.map((procedure, index) => ({record, procedure, recordIndex, index})));
