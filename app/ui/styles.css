@@ -101,11 +101,13 @@ input,select { width:100%; min-height:35px; border:1px solid #d7d7d7; border-rad
 .tag { display:inline-flex; gap:5px; border:1px solid var(--line); border-radius:4px; padding:3px 6px; font-size:12px }
 .tag b,.code { font:12px ui-monospace,monospace }
 .tag b { flex:none; white-space:nowrap }
-.table-wrap { overflow:auto; border:1px solid #e1e6e9; border-radius:8px }
-.treatment-table { border-collapse:collapse; width:100%; min-width:740px; text-align:left }
+.table-wrap { min-width:740px; border:1px solid #e1e6e9; border-radius:8px }
+.treatment-table { border-collapse:separate; border-spacing:0; width:100%; min-width:740px; text-align:left }
 .treatment-table thead { background:#f4f6f7; color:#464e53; font-size:12px }
 .treatment-table th,.treatment-table td { padding:10px 12px; border-bottom:1px solid #e6eaec; vertical-align:top }
-.treatment-table th { white-space:nowrap }
+.treatment-table th { position:sticky; top:0; z-index:1; background:#f4f6f7; box-shadow:0 1px 0 #e1e6e9; white-space:nowrap }
+.treatment-table th:first-child { border-top-left-radius:7px }
+.treatment-table th:last-child { border-top-right-radius:7px }
 .treatment-table th:nth-child(3) { width:23% }
 .treatment-table th:nth-child(4) { width:36% }
 .treatment-table tr:last-child > td { border-bottom:0 }
@@ -198,16 +200,6 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
   .patient-actions { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; align-items:stretch; padding:0; border:0 }
   .patient-actions .control { padding-inline:6px; white-space:normal }
   .detail-fields > div { column-gap:10px }
-}
-@media(max-width:740px) {
-  .treatment-table,.treatment-table tbody { display:block; min-width:0 }
-  .treatment-table thead { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden }
-  .treatment-table tr.summary-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 10px; padding:10px 12px; border-bottom:1px solid var(--line) }
-  .treatment-table tr.treatment-start:not(:first-child) { border-top:1px solid #d4dde2 }
-  .treatment-table tr.summary-row > td,.treatment-table tr.treatment-start:not(:first-child) > td { display:block; border:0; padding:0 }
-  .treatment-table .summary-row > td::before { content:attr(data-label); display:block; color:var(--muted); font-size:11px; margin-bottom:2px }
-  .treatment-table .diagnosis-cell,.treatment-table .activity-cell { grid-column:1/-1 }
-  .treatment-table tr.detail-row,.treatment-table tr.detail-row > td { display:block }
 }
 
 [data-v-6523b72c] rect[fill="white"] { display: none; }
