@@ -172,6 +172,16 @@ void verifyProtocol() {
         "<h:header><h:messageType value=\"D006\"/><h:messageId value=\"" + treatment.id.toUtf8() +
         "\"/></h:header><h:contents><h:foundNumber value=\"0\"/></h:contents></h:message>";
     validateDentalResponse(parseNhIs(response), treatment);
+    auto inconsistentTotal = response;
+    inconsistentTotal.replace("</h:contents>", "<h:results/></h:contents>");
+    validateDentalResponse(parseNhIs(inconsistentTotal), treatment);
+    auto missingRecords = response;
+    missingRecords.replace("foundNumber value=\"0\"", "foundNumber value=\"1\"");
+    bool missingRejected = false;
+    try {
+        validateDentalResponse(parseNhIs(missingRecords), treatment);
+    } catch (const std::exception &) { missingRejected = true; }
+    expect(missingRejected, "A nonempty total without records was accepted as an empty lookup");
     bool rejected = false;
     try {
         validateDentalResponse(parseNhIs(response), status);

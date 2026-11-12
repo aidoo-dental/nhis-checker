@@ -154,13 +154,15 @@ void validateDentalResponse(const QDomDocument &document, const DentalMessage &r
         if (child(contents, "dentalStatus").isNull())
             fail(QStringLiteral("В отговора на НЗИС липсва денталният статус."));
     } else {
+        // The reported total is informational when records are present. Patient
+        // identity is verified separately for every returned record.
+        if (!child(contents, "results").isNull()) return;
         bool ok = false;
         const auto total = value(contents, "foundNumber").toUInt(&ok);
-        unsigned returned = 0;
-        for (auto row = contents.firstChildElement(); !row.isNull(); row = row.nextSiblingElement())
-            if (row.localName() == "results" && row.namespaceURI() == ns) ++returned;
-        if (!ok || returned > 20 || returned > total || (total != 0 && returned == 0))
-            fail(QStringLiteral("НЗИС върна несъответствие в броя на леченията."));
+        if (!ok)
+            fail(QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."));
+        if (total != 0)
+            fail(QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."));
     }
 }
 

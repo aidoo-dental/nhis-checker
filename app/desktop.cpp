@@ -48,9 +48,21 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
                 : view == "settings" ? QStringLiteral("Настройки") : QStringLiteral("Пациент");
             QStringList details;
             static const QRegularExpression metadata(QStringLiteral(
-                R"(\A(?:Код [A-Z][0-9]{3}|Заявка D00[59] · ID [0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\z)"));
+                R"(\A(?:Код [A-Z][0-9]{3}|Заявка D00[59] · ID [0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|Неуспешна дентална справка D00[59] \(HTTP [1-5][0-9]{2}\)\.|НЗИС върна грешка \([A-Z]099\)\.|НЗИС върна неочакван тип отговор\. Очаква се D0(?:06|10)\.)\z)"));
+            static const QStringList knownReasons{
+                QStringLiteral("НЗИС върна празен отговор. Повтори справката."),
+                QStringLiteral("НЗИС върна отговор в неочакван формат. Очаква се XML съобщение."),
+                QStringLiteral("В XML отговора на НЗИС липсва типът на съобщението."),
+                QStringLiteral("Отговорът на НЗИС е за друга заявка. Повтори справката."),
+                QStringLiteral("В отговора на НЗИС липсва денталният статус."),
+                QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."),
+                QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."),
+                QStringLiteral("НЗИС не върна достатъчно пациентски данни за проверка на имената и идентификатора. Справката е блокирана."),
+                QStringLiteral("Имената и идентификаторът не съвпадат с пациентските данни, върнати от НЗИС. Провери изписването. Справката е блокирана.")
+            };
             for (const auto &line : field("message").left(6000).split('\n')) {
-                if (metadata.match(line).hasMatch() && details.size() < 9) details << line;
+                if (details.size() < 12 && (metadata.match(line).hasMatch() || knownReasons.contains(line)))
+                    details << line;
             }
             entries.prepend(QJsonObject{
                 {"time", QDateTime::currentDateTime().toString(Qt::ISODate)},

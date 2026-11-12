@@ -54,10 +54,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert(await evaluate(`(async()=>{
       document.querySelector('#open-settings').click();
       await desktop('clearErrorLog');
-      setNotice('settings','Installer smoke test'+String.fromCharCode(10)+'Код E003','cancelled');
+      setNotice('settings',['Installer smoke test','Неуспешна дентална справка D005 (HTTP 400).','Код E003'].join(String.fromCharCode(10)),'cancelled');
       await errorLogQueue;
       const log = document.querySelector('#error-log').value;
-      return document.querySelector('#view-settings').open && log.includes('E003') &&
+      return document.querySelector('#view-settings').open && log.includes('E003') && log.includes('HTTP 400') &&
         !log.includes('Installer smoke test') && !!document.querySelector('.toast');
     })()`),'Drawer, native journal or toast failed');
     await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
