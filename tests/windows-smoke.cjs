@@ -62,6 +62,25 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await evaluate("document.querySelector('#view-settings').open"),false);
     assert(await evaluate(`(async()=>{document.querySelector('#open-settings').click();document.querySelector('#clear-errors').click();await errorLogQueue;return document.querySelector('#error-log').value==='';})()`));
+    await evaluate(`(() => {
+      document.querySelector('#view-settings').close();
+      showView('treatments');
+      document.querySelector('#view-treatments [data-result]').hidden=false;
+      const body=document.querySelector('#records');
+      for(let row=0;row<60;row++) {
+        const tr=body.insertRow();tr.className='summary-row';
+        for(let col=0;col<7;col++)tr.insertCell().textContent='Test '+row+' / '+col;
+      }
+    })()`);
+    for(const offset of [400,900]) {
+      await evaluate(`document.querySelector('main').scrollTop=${offset}`);
+      await delay(100);
+      assert(await evaluate(`(() => {
+        const main=document.querySelector('main').getBoundingClientRect();
+        const cells=[...document.querySelectorAll('.treatment-table th')];
+        return cells.length===7 && cells.every(cell=>Math.abs(cell.getBoundingClientRect().top-main.top)<2);
+      })()`),'Column headings must stay at the top of the results viewport');
+    }
     await fs.mkdir('build-win',{recursive:true});
     const screenshot=await send('Page.captureScreenshot',{format:'png'});
     await fs.writeFile('build-win/windows-installed.png',Buffer.from(screenshot.data,'base64'));
