@@ -68,8 +68,6 @@ jobs:
           $install = Join-Path $env:RUNNER_TEMP 'NHIS Checker installed'
           $p = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Installer failed: $($p.ExitCode)" }
-          npm install --prefix .deps/smoke playwright-core@1.65.0 --ignore-scripts --no-audit --no-fund
-          $env:NODE_PATH = "$pwd/.deps/smoke/node_modules"
           node tests/windows-smoke.cjs "$install/NHIS Checker.exe"
           $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
