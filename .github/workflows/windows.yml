@@ -30,6 +30,7 @@ jobs:
           ref: 7cc5ff8668babd02224d51af40d32f5e0b07868c
           path: .deps/vcpkg
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: deps-cache
         with:
           path: .deps/vcpkg/installed
           key: windows-x64-vcpkg-7cc5ff8-openssl-libxml2
@@ -45,6 +46,11 @@ jobs:
           Push-Location .deps/libp11-0.4.18/src
           nmake /nologo /f Makefile.mak libp11.dll BUILD_FOR=WIN64 "OPENSSL_DIR=$ssl"
           Pop-Location
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        with:
+          path: .deps/vcpkg/installed
+          key: windows-x64-vcpkg-7cc5ff8-openssl-libxml2
       - name: Compile and test
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
