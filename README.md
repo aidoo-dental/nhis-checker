@@ -4,6 +4,8 @@
 
 Готовите DMG пакети за macOS 12.0 и по-нови версии се публикуват в [Releases](https://github.com/aidoo-dental/nhis-checker/releases), отделно за Apple Silicon и Intel. Името на всеки пакет включва версията.
 
+За Windows 10 (1809+) и Windows 11 x64 се предлага EXE инсталатор. Инсталира се за текущия потребител, създава пряк път в Start менюто и включва нужните библиотеки. Драйверът за КЕП се инсталира отделно от доставчика и трябва да е 64-битов. Инсталаторът засега няма Authenticode подпис.
+
 ## Работа с приложението
 
 1. В „Настройки“ въведи ЛПК и РЗИ номера на практиката, избери среда и запази. При първо стартиране е избрана тестовата среда.
@@ -50,6 +52,16 @@ done
 Скриптът проверява архитектурата и минималната версия на macOS за всеки включен бинарен файл. Пакетите в `dist/` се именуват `NHIS Checker <версия> - Apple Silicon.dmg` и `NHIS Checker <версия> - Intel.dmg`, като версията се прочита от пакетираното приложение. Пробните пакети използват локален ad hoc подпис на приложението.
 
 ## Компилиране за Windows x64
+
+Workflow-ът `.github/workflows/windows.yml` компилира с MSVC 2022, Qt 6.8.3, OpenSSL, libxml2 и libp11. Изпълнява протоколните тестове и проверява всички вградени ресурси, пакетира чрез Inno Setup 6, инсталира EXE файла и проверява реалния интерфейс, връзката с приложението, известията и журнала. Накрая проверява деинсталирането. Готовият инсталатор е в артефакта `NHIS-Checker-Windows-x64` на успешния run.
+
+Пакетиране след локално компилиране (PowerShell 7 в MSVC x64 среда):
+
+```powershell
+./scripts/package-windows.ps1 -BuildDir build-win -QtDir C:/Qt/6.8.3/msvc2022_64 -DepsDir C:/deps/x64 -LibP11Dir C:/deps/libp11
+```
+
+Резултат: `dist/NHIS Checker <версия> - Windows x64 Setup.exe`. Версията се прочита от компилирания EXE.
 
 Нужни са MSVC 2022 x64, CMake, Qt 6 за MSVC с Qt WebEngine и Qt WebChannel, OpenSSL 3, libxml2 и libp11 за x64. Библиотеката libp11 може да се компилира с `nmake /f Makefile.mak OPENSSL_DIR=C:\OpenSSL-Win64 BUILD_FOR=WIN64` в x64 Native Tools Command Prompt. [Инструкции на libp11](https://github.com/OpenSC/libp11/blob/master/INSTALL.md#windows-build)
 
