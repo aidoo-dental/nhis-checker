@@ -30,6 +30,10 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
+#ifdef SignWithAzure
+SignTool=aidoo
+SignedUninstaller=yes
+#endif
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 [Files]

@@ -73,10 +73,18 @@ jobs:
           node tests/windows-smoke.cjs "$install/NHIS Checker.exe"
           $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
+      - name: Freeze payload for Azure signing
+        run: Compress-Archive -Path build-win/payload/* -DestinationPath dist/NHIS-Checker-Windows-signing-payload.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: NHIS-Checker-Windows-x64
           path: dist/*Setup.exe
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: NHIS-Checker-Windows-signing-payload
+          path: dist/NHIS-Checker-Windows-signing-payload.zip
           if-no-files-found: error
           compression-level: 0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
