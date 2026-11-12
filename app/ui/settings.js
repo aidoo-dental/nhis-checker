@@ -1,5 +1,8 @@
 let activeSettings;
 const settingsFields = ['lpk', 'practice', 'environment', 'driver'];
+const settingsDrawer = get('view-settings');
+const settingsBackdrop = get('settings-backdrop');
+let previousSettingsFocus;
 function applySettings(settings) {
   activeSettings = settings;
   for (const id of settingsFields) get(id).value = settings[id];
@@ -9,21 +12,59 @@ function applySettings(settings) {
 }
 
 function openSettings() {
-  if (get('view-settings').open) return;
+  if (settingsDrawer.hasAttribute('open')) return;
+  previousSettingsFocus = document.activeElement;
   if (activeSettings) applySettings(activeSettings);
   setNotice('settings', '');
-  get('view-settings').append(get('toast-region'));
-  get('view-settings').showModal();
+  settingsDrawer.append(get('toast-region'));
+  if (typeof settingsDrawer.showModal === 'function') settingsDrawer.showModal();
+  else {
+    settingsBackdrop.hidden = false;
+    settingsDrawer.setAttribute('open', '');
+    settingsDrawer.setAttribute('aria-modal', 'true');
+    get('close-settings').focus();
+  }
   get('drawer-body').scrollTop = 0;
   updateErrorLog('errorLog');
 }
+function closeSettings() {
+  if (typeof settingsDrawer.close === 'function') settingsDrawer.close();
+  else {
+    settingsDrawer.removeAttribute('open');
+    settingsDrawer.removeAttribute('aria-modal');
+    settingsDrawer.dispatchEvent(new Event('close'));
+  }
+}
 get('open-settings').addEventListener('click', openSettings);
-get('view-settings').addEventListener('close', () => document.body.append(get('toast-region')));
-get('view-settings').addEventListener('click', event => {
-  const bounds = get('view-settings').getBoundingClientRect();
-  if (event.target === get('view-settings') &&
+settingsBackdrop.addEventListener('click', closeSettings);
+settingsDrawer.addEventListener('close', () => {
+  settingsBackdrop.hidden = true;
+  document.body.append(get('toast-region'));
+  previousSettingsFocus?.focus();
+});
+document.addEventListener('focusin', event => {
+  if (!settingsBackdrop.hidden && !settingsDrawer.contains(event.target)) get('close-settings').focus();
+});
+settingsDrawer.addEventListener('keydown', event => {
+  if (settingsBackdrop.hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeSettings();
+  } else if (event.key === 'Tab') {
+    const controls = [...settingsDrawer.querySelectorAll('button, input, select, textarea')]
+      .filter(control => !control.disabled && control.tabIndex >= 0 && control.getClientRects().length);
+    const index = controls.indexOf(document.activeElement);
+    if (controls.length && (index < 0 || (event.shiftKey ? index === 0 : index === controls.length - 1))) {
+      event.preventDefault();
+      controls[event.shiftKey ? controls.length - 1 : 0].focus();
+    }
+  }
+});
+settingsDrawer.addEventListener('click', event => {
+  const bounds = settingsDrawer.getBoundingClientRect();
+  if (event.target === settingsDrawer &&
       (event.clientX < bounds.left || event.clientX > bounds.right ||
-       event.clientY < bounds.top || event.clientY > bounds.bottom)) get('view-settings').close();
+       event.clientY < bounds.top || event.clientY > bounds.bottom)) closeSettings();
 });
 get('settings-form').addEventListener('submit', async (event) => {
   event.preventDefault();

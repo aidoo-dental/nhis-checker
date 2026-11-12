@@ -78,6 +78,10 @@
           <span><i class="dot absent" style="--dot:#fff;--stroke:#809297"></i>Липсващ</span>
           <span><i class="dot" style="--dot:#f0f0f0;--stroke:#c4c4c4"></i>Няма подаден статус</span>
         </div>
+        <section class="dentition-history" id="additional-teeth-section" aria-labelledby="additional-teeth-heading" hidden>
+          <h2 id="additional-teeth-heading">Допълнителни зъби</h2>
+          <div class="detail-list" id="additional-teeth"></div>
+        </section>
         <div class="tooth-summary" id="tooth-summary" aria-live="polite" hidden>
           <strong id="selected-tooth"></strong>
           <div id="selected-conditions" class="detail-list"></div>
@@ -99,6 +103,7 @@
         <div class="cardhead">
           <div>
             <h2 id="records-count">Намерени лечения</h2>
+            <p class="hint count-detail" id="records-limit"></p>
             <p class="hint count-detail" id="records-filtered"></p>
           </div>
           <div class="filterbar">
@@ -126,7 +131,8 @@
         <p id="no-records" class="hint" hidden>Няма записи по този филтър.</p>
       </div>
     </section>
-    <dialog class="settings-drawer" id="view-settings" aria-labelledby="settings-title">
+    <div class="settings-backdrop" id="settings-backdrop" aria-hidden="true" hidden></div>
+    <dialog class="settings-drawer" id="view-settings" role="dialog" aria-labelledby="settings-title">
       <header class="mainhead">
         <h1 id="settings-title">Настройки</h1>
         <button type="button" class="control" id="close-settings">Затвори</button>

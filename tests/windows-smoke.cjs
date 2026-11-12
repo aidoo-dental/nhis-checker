@@ -54,13 +54,36 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert(await evaluate(`(async()=>{
       document.querySelector('#open-settings').click();
       await desktop('clearErrorLog');
-      setNotice('settings','Installer smoke test','cancelled');
+      setNotice('settings',['Installer smoke test','Неуспешна дентална справка D005 (HTTP 400).','Код E003'].join(String.fromCharCode(10)),'cancelled');
       await errorLogQueue;
-      return document.querySelector('#view-settings').open && document.querySelector('#error-log').value.includes('Installer smoke test') && !!document.querySelector('.toast');
+      const log = document.querySelector('#error-log').value;
+      return document.querySelector('#view-settings').open && log.includes('E003') && log.includes('HTTP 400') &&
+        !log.includes('Installer smoke test') && !!document.querySelector('.toast');
     })()`),'Drawer, native journal or toast failed');
     await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await evaluate("document.querySelector('#view-settings').open"),false);
+    assert(await evaluate(`(() => {
+      const drawer = document.querySelector('#view-settings');
+      drawer.showModal = undefined;
+      drawer.close = undefined;
+      openSettings();
+      const opened = drawer.hasAttribute('open') && !get('settings-backdrop').hidden;
+      closeSettings();
+      delete drawer.showModal;
+      delete drawer.close;
+      return opened && !drawer.hasAttribute('open') && get('settings-backdrop').hidden;
+    })()`), 'Settings fallback did not open and close');
+    assert(await evaluate(`(() => {
+      const day = '2026-01-02';
+      displayDentition({date:'2026-01-03',history:[],current:[
+        {fdi:'11',date:day,conditions:['E']}, {fdi:'51',date:day,conditions:['O']},
+        {fdi:'11.1',date:day,conditions:['C']}
+      ]});
+      const additional = [...get('additional-teeth').children].map(button => button.textContent);
+      return additional.includes('51') && additional.includes('11.1') &&
+        dentitionByDate.get(day).size === 3;
+    })()`), 'Mixed dentition or supernumerary tooth disappeared');
     assert(await evaluate(`(async()=>{document.querySelector('#open-settings').click();document.querySelector('#clear-errors').click();await errorLogQueue;return document.querySelector('#error-log').value==='';})()`));
     await evaluate(`(() => {
       document.querySelector('#view-settings').close();

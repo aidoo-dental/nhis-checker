@@ -167,7 +167,12 @@ QByteArray NhisClient::lookup(QWidget *parent, const DentalMessage &message, boo
         validatePatientIdentity(parseNhIs(identity), patient);
     }
     const auto result = requestDental(message, production);
-    if (message.type == "D005") validatePatientIdentity(parseNhIs(result), patient);
+    if (message.type == "D005") {
+        const auto parsed = parseNhIs(result);
+        if (child(child(parsed.documentElement(), "contents"), "results").isNull())
+            return {}; // No patient records to display or export.
+        validatePatientIdentity(parsed, patient);
+    }
     return result;
 }
 

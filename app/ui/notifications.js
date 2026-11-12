@@ -30,8 +30,7 @@ function setNotice(view, message, state = 'info') {
   activeToasts.get(view)?.dismiss();
   if (!message || state === 'loading') return;
   if (state === 'cancelled') {
-    const context = {...labels, patient: 'Пациент', settings: 'Настройки'}[view] || view;
-    updateErrorLog('logError', {context, message});
+    updateErrorLog('logError', {view, message});
   }
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -44,9 +43,7 @@ function setNotice(view, message, state = 'info') {
   const text = document.createElement('div');
   text.className = 'toast-message';
   text.setAttribute('role', state === 'cancelled' ? 'alert' : 'status');
-  text.textContent = state === 'cancelled'
-    ? message.split('\n')[0] + '\nПодробностите са в журнала на грешките.'
-    : message;
+  text.textContent = message;
   toast.append(text);
   if (state === 'cancelled') {
     const details = document.createElement('button');

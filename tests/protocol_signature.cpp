@@ -172,6 +172,16 @@ void verifyProtocol() {
         "<h:header><h:messageType value=\"D006\"/><h:messageId value=\"" + treatment.id.toUtf8() +
         "\"/></h:header><h:contents><h:foundNumber value=\"0\"/></h:contents></h:message>";
     validateDentalResponse(parseNhIs(response), treatment);
+    auto inconsistentTotal = response;
+    inconsistentTotal.replace("</h:contents>", "<h:results/></h:contents>");
+    validateDentalResponse(parseNhIs(inconsistentTotal), treatment);
+    auto missingRecords = response;
+    missingRecords.replace("foundNumber value=\"0\"", "foundNumber value=\"1\"");
+    bool missingRejected = false;
+    try {
+        validateDentalResponse(parseNhIs(missingRecords), treatment);
+    } catch (const std::exception &) { missingRejected = true; }
+    expect(missingRejected, "A nonempty total without records was accepted as an empty lookup");
     bool rejected = false;
     try {
         validateDentalResponse(parseNhIs(response), status);
@@ -186,9 +196,9 @@ void verifyProtocol() {
         "<h:error><h:type value=\"E002\"/></h:error>"
         "</h:contents></h:message>");
     const auto errorText = nhisResponseError(rejection);
-    expect(errorText.contains("D099") && errorText.contains("E003") && errorText.contains("Test rejection") &&
-           errorText.contains("Additional information") && errorText.contains("senderId") && errorText.contains("E002"),
-           "NHIS error response lost diagnostic details");
+    expect(errorText.contains("D099") && errorText.contains("E003") && errorText.contains("E002") &&
+           !errorText.contains("Test rejection") && !errorText.contains("Additional information") &&
+           !errorText.contains("senderId"), "NHIS errors must retain codes and omit server text");
     rejected = false;
     try {
         validateDentalResponse(rejection, status);
@@ -197,6 +207,9 @@ void verifyProtocol() {
     }
     expect(rejected, "D099 was not reported with its diagnostic details");
     expect(tryParseNhIs("<html>Gateway error</html>").isNull(), "An HTML gateway error was accepted as NHIS XML");
+    const QByteArray deep = "<message xmlns=\"https://www.his.bg\">" +
+        QByteArray("<item>").repeated(64) + QByteArray("</item>").repeated(64) + "</message>";
+    expect(tryParseNhIs(deep).isNull(), "Excessive XML depth reached the DOM parser");
     expect(nhisResponseError(parseNhIs(response)).isEmpty(), "A successful response was treated as an error");
 
     verifySignature(treatment.xml);

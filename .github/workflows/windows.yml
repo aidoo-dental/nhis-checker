@@ -1,6 +1,8 @@
 name: Windows installer
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['app/**', 'tests/**', 'scripts/**', 'CMakeLists.txt', '.github/workflows/windows.yml']
   push:
     branches: [main]
     paths: ['app/**', 'tests/**', 'scripts/**', 'CMakeLists.txt', '.github/workflows/windows.yml']
@@ -15,6 +17,10 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check signing artifact verification
+        run: node --test tests/verify-windows-payload.mjs
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
         with:
           arch: x64
@@ -29,38 +35,58 @@ jobs:
           repository: microsoft/vcpkg
           ref: 7cc5ff8668babd02224d51af40d32f5e0b07868c
           path: .deps/vcpkg
+          persist-credentials: false
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: deps-cache
         with:
-          path: .deps/vcpkg/installed
-          key: windows-x64-vcpkg-7cc5ff8-openssl-libxml2
+          path: |
+            .deps/vcpkg/installed
+            .deps/openssl
+          key: windows-x64-vcpkg-7cc5ff8-openssl-3.5.9-libxml2
       - name: Build dependencies
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           & .deps/vcpkg/bootstrap-vcpkg.bat -disableMetrics
-          & .deps/vcpkg/vcpkg.exe install openssl:x64-windows libxml2:x64-windows --recurse
+          & .deps/vcpkg/vcpkg.exe install libxml2:x64-windows --recurse
+          if (!(Test-Path .deps/openssl/bin/libcrypto-3-x64.dll)) {
+            Invoke-WebRequest 'https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz' -OutFile .deps/openssl.tar.gz
+            if ((Get-FileHash .deps/openssl.tar.gz -Algorithm SHA256).Hash -ne '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a') { throw 'OpenSSL checksum mismatch' }
+            tar -xzf .deps/openssl.tar.gz -C .deps
+            $prefix = Join-Path (Resolve-Path .deps).Path 'openssl'
+            Push-Location .deps/openssl-3.5.9
+            try {
+              perl Configure VC-WIN64A no-asm "--prefix=$prefix" --libdir=lib
+              nmake /nologo
+              nmake /nologo install_sw
+              New-Item "$prefix/share/openssl" -ItemType Directory -Force | Out-Null
+              Copy-Item LICENSE.txt "$prefix/share/openssl/copyright"
+            } finally { Pop-Location }
+          }
           Invoke-WebRequest 'https://github.com/OpenSC/libp11/releases/download/libp11-0.4.18/libp11-0.4.18.tar.gz' -OutFile .deps/libp11.tar.gz
           if ((Get-FileHash .deps/libp11.tar.gz -Algorithm SHA256).Hash -ne '9292de67ca73aba1deacf577c9086b595765f36ef47712cfeb49fa31f6e772fb') { throw 'libp11 checksum mismatch' }
           tar -xzf .deps/libp11.tar.gz -C .deps
-          $ssl = (Resolve-Path .deps/vcpkg/installed/x64-windows).Path
+          $ssl = (Resolve-Path .deps/openssl).Path
           Push-Location .deps/libp11-0.4.18/src
           nmake /nologo /f Makefile.mak libp11.dll BUILD_FOR=WIN64 "OPENSSL_DIR=$ssl"
           Pop-Location
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         if: steps.deps-cache.outputs.cache-hit != 'true'
         with:
-          path: .deps/vcpkg/installed
-          key: windows-x64-vcpkg-7cc5ff8-openssl-libxml2
+          path: |
+            .deps/vcpkg/installed
+            .deps/openssl
+          key: windows-x64-vcpkg-7cc5ff8-openssl-3.5.9-libxml2
       - name: Compile and test
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $deps = (Resolve-Path .deps/vcpkg/installed/x64-windows).Path
           $p11 = (Resolve-Path .deps/libp11-0.4.18/src).Path
-          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps" "-DOPENSSL_ROOT_DIR=$deps" "-DLIBP11_INCLUDE_DIR=$p11" "-DLIBP11_LIBRARY=$p11/libp11.lib"
+          $ssl = (Resolve-Path .deps/openssl).Path
+          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps" "-DOPENSSL_ROOT_DIR=$ssl" "-DLIBP11_INCLUDE_DIR=$p11" "-DLIBP11_LIBRARY=$p11/libp11.lib"
           cmake --build build-win
-          $env:PATH = "$deps/bin;$p11;$env:PATH"
+          $env:PATH = "$ssl/bin;$deps/bin;$p11;$env:PATH"
           ctest --test-dir build-win --output-on-failure
-          ./scripts/package-windows.ps1 -BuildDir build-win -QtDir $env:QT_ROOT_DIR -DepsDir $deps -LibP11Dir .deps/libp11-0.4.18
+          ./scripts/package-windows.ps1 -BuildDir build-win -QtDir $env:QT_ROOT_DIR -DepsDir $deps -LibP11Dir .deps/libp11-0.4.18 -OpenSSLDir $ssl
       - name: Test installed app and uninstall
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
@@ -72,16 +98,13 @@ jobs:
           $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
       - name: Freeze payload for Azure signing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: Compress-Archive -Path build-win/payload/* -DestinationPath dist/NHIS-Checker-Windows-signing-payload.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: NHIS-Checker-Windows-x64
-          path: dist/*Setup.exe
-          if-no-files-found: error
-          compression-level: 0
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: NHIS-Checker-Windows-signing-payload
+          retention-days: 3
           path: dist/NHIS-Checker-Windows-signing-payload.zip
           if-no-files-found: error
           compression-level: 0

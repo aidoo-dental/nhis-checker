@@ -10,8 +10,15 @@
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QRegularExpression>
 
-Desktop::Desktop(QWidget *window) : window(window) {}
+Desktop::Desktop(QWidget *window) : window(window) {
+    // The previous journal included free text from the server.
+    if (config.contains("errorLog")) {
+        config.remove("errorLog");
+        config.sync();
+    }
+}
 
 QJsonObject Desktop::settings() const {
     return {{"lpk", config.value("lpk").toString()}, {"practice", config.value("practice").toString()},
@@ -33,19 +40,41 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
     const auto field = [&](const QString &key) { return data.value(key).toString().trimmed(); };
     if (action == "settings") return settings();
     if (action == "errorLog" || action == "logError" || action == "clearErrorLog") {
-        auto entries = QJsonDocument::fromJson(config.value("errorLog").toByteArray()).array();
+        auto entries = QJsonDocument::fromJson(config.value("errorLogV2").toByteArray()).array();
         if (action == "logError" && !field("message").isEmpty()) {
+            const auto view = field("view");
+            const auto context = view == "status" ? QStringLiteral("Дентален статус")
+                : view == "treatments" ? QStringLiteral("Лечения")
+                : view == "settings" ? QStringLiteral("Настройки") : QStringLiteral("Пациент");
+            QStringList details;
+            static const QRegularExpression metadata(QStringLiteral(
+                R"(\A(?:Код [A-Z][0-9]{3}|Заявка D00[59] · ID [0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|Неуспешна дентална справка D00[59] \(HTTP [1-5][0-9]{2}\)\.|НЗИС върна грешка \([A-Z]099\)\.|НЗИС върна неочакван тип отговор\. Очаква се D0(?:06|10)\.)\z)"));
+            static const QStringList knownReasons{
+                QStringLiteral("НЗИС върна празен отговор. Повтори справката."),
+                QStringLiteral("НЗИС върна отговор в неочакван формат. Очаква се XML съобщение."),
+                QStringLiteral("В XML отговора на НЗИС липсва типът на съобщението."),
+                QStringLiteral("Отговорът на НЗИС е за друга заявка. Повтори справката."),
+                QStringLiteral("В отговора на НЗИС липсва денталният статус."),
+                QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."),
+                QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."),
+                QStringLiteral("НЗИС не върна достатъчно пациентски данни за проверка на имената и идентификатора. Справката е блокирана."),
+                QStringLiteral("Имената и идентификаторът не съвпадат с пациентските данни, върнати от НЗИС. Провери изписването. Справката е блокирана.")
+            };
+            for (const auto &line : field("message").left(6000).split('\n')) {
+                if (details.size() < 12 && (metadata.match(line).hasMatch() || knownReasons.contains(line)))
+                    details << line;
+            }
             entries.prepend(QJsonObject{
                 {"time", QDateTime::currentDateTime().toString(Qt::ISODate)},
-                {"context", field("context").left(80)},
-                {"message", field("message").left(6000)},
+                {"context", context},
+                {"message", details.isEmpty() ? QStringLiteral("Операцията е неуспешна.") : details.join('\n')},
                 {"version", APP_VERSION},
                 {"environment", config.value("environment", "test").toString()}});
             while (entries.size() > 100) entries.removeLast();
         }
         if (action == "clearErrorLog") entries = {};
         if (action != "errorLog") {
-            config.setValue("errorLog", QJsonDocument(entries).toJson(QJsonDocument::Compact));
+            config.setValue("errorLogV2", QJsonDocument(entries).toJson(QJsonDocument::Compact));
             config.sync();
             if (config.status() != QSettings::NoError)
                 fail(QStringLiteral("Журналът на грешките не можа да се запази."));
@@ -97,6 +126,7 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
         const auto request = makeDentalMessage(view == "status", patient, practice);
         auto xml = client.lookup(window, request, prefs.value("environment") == "production",
                                  prefs.value("driver").toString(), prefs.value("remember").toBool(), patient, practice);
+        if (xml.isEmpty()) return {{"empty", true}};
         const auto text = QString::fromUtf8(xml);
         responses.insert(view, {request.id, request.replyType, std::move(xml)});
         return {{"id", request.id}, {"xml", text}};
