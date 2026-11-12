@@ -128,6 +128,6 @@
 
 ## Лиценз и източници
 
-Кодът е под [GNU GPL v3](LICENSE). XML подписването е адаптирано от [DinoDent](https://github.com/thefinalcutbg/DinoDent). Денталните SVG изображения и иконите за статус са от AIDOO. Лицензите на включените библиотеки са в [app/assets/licenses](app/assets/licenses) и в инсталационните пакети.
+Кодът е под [GNU GPL v3](LICENSE). **Кодът за XML подписване с КЕП е взет от [DinoDent](https://github.com/thefinalcutbg/DinoDent) на [thefinalcutbg](https://github.com/thefinalcutbg) и е адаптиран за NHIS Checker.** Денталните SVG изображения и иконите за статус са от AIDOO. Лицензите на включените библиотеки са в [app/assets/licenses](app/assets/licenses) и в инсталационните пакети.
 
 Използвани са [спецификацията за денталните услуги](https://docs.google.com/spreadsheets/d/1SOLwRGWEb0McPhBME2lbi2OVRpkRwQlfN_4cMv7Y5vk/edit) и [номенклатурите на НЗИС](https://docs.google.com/spreadsheets/d/11V7vP_dcqIPoLfbM69vSGtW8YvyjtxETXOiOWkFoy_Q/edit).
