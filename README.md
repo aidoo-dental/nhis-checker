@@ -5,7 +5,7 @@
 <p align="center"><strong>Дентален статус и лечения от НЗИС — в едно настолно приложение.</strong><br />Разработено от AIDOO за macOS и Windows.</p>
 <p align="center">
   <a href="https://github.com/aidoo-dental/nhis-checker/releases/latest"><img alt="Последна версия" src="https://img.shields.io/github/v/release/aidoo-dental/nhis-checker?label=version&amp;color=087f6b" /></a>
-  <a href="https://github.com/aidoo-dental/nhis-checker/actions/workflows/windows.yml"><img alt="Windows build" src="https://github.com/aidoo-dental/nhis-checker/actions/workflows/windows.yml/badge.svg" /></a>
+  <a href="https://github.com/aidoo-dental/nhis-checker/actions/workflows/windows.yml"><img alt="Windows build" src="https://github.com/aidoo-dental/nhis-checker/actions/workflows/windows.yml/badge.svg?branch=main" /></a>
   <a href="LICENSE"><img alt="GPL v3" src="https://img.shields.io/badge/license-GPL--3.0-blue" /></a>
 </p>
 <p align="center">
