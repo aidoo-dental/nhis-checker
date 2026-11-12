@@ -1,0 +1,81 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['app/**', 'tests/**', 'scripts/**', 'CMakeLists.txt', '.github/workflows/windows.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+      - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+          cache: true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: microsoft/vcpkg
+          ref: 7cc5ff8668babd02224d51af40d32f5e0b07868c
+          path: .deps/vcpkg
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps/vcpkg/installed
+          key: windows-x64-vcpkg-7cc5ff8-openssl-libxml2
+      - name: Build dependencies
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          & .deps/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          & .deps/vcpkg/vcpkg.exe install openssl:x64-windows libxml2:x64-windows --recurse
+          Invoke-WebRequest 'https://github.com/OpenSC/libp11/releases/download/libp11-0.4.18/libp11-0.4.18.tar.gz' -OutFile .deps/libp11.tar.gz
+          if ((Get-FileHash .deps/libp11.tar.gz -Algorithm SHA256).Hash -ne '9292de67ca73aba1deacf577c9086b595765f36ef47712cfeb49fa31f6e772fb') { throw 'libp11 checksum mismatch' }
+          tar -xzf .deps/libp11.tar.gz -C .deps
+          $ssl = (Resolve-Path .deps/vcpkg/installed/x64-windows).Path
+          Push-Location .deps/libp11-0.4.18/src
+          nmake /nologo /f Makefile.mak libp11.dll BUILD_FOR=WIN64 "OPENSSL_DIR=$ssl"
+          Pop-Location
+      - name: Compile and test
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $deps = (Resolve-Path .deps/vcpkg/installed/x64-windows).Path
+          $p11 = (Resolve-Path .deps/libp11-0.4.18/src).Path
+          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR;$deps" "-DOPENSSL_ROOT_DIR=$deps" "-DLIBP11_INCLUDE_DIR=$p11" "-DLIBP11_LIBRARY=$p11/libp11.lib"
+          cmake --build build-win
+          $env:PATH = "$deps/bin;$p11;$env:PATH"
+          ctest --test-dir build-win --output-on-failure
+          ./scripts/package-windows.ps1 -BuildDir build-win -QtDir $env:QT_ROOT_DIR -DepsDir $deps -LibP11Dir .deps/libp11-0.4.18
+      - name: Test installed app and uninstall
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $installer = (Get-ChildItem 'dist/*Setup.exe').FullName
+          $install = Join-Path $env:RUNNER_TEMP 'NHIS Checker installed'
+          $p = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer failed: $($p.ExitCode)" }
+          npm install --prefix .deps/smoke playwright-core@1.65.0 --ignore-scripts --no-audit --no-fund
+          $env:NODE_PATH = "$pwd/.deps/smoke/node_modules"
+          node tests/windows-smoke.cjs "$install/NHIS Checker.exe"
+          $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: NHIS-Checker-Windows-x64
+          path: dist/*Setup.exe
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: Windows-diagnostics
+          path: build-win/*.png
+          if-no-files-found: ignore

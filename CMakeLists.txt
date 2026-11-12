@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(NZISSpravki VERSION 1.0.9 LANGUAGES CXX)
+project(NZISSpravki VERSION 1.0.10 LANGUAGES CXX)
 set(APP_NAME "NHIS Checker")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +32,11 @@ target_link_libraries(NZISSpravki PRIVATE nzis_protocol Qt6::Widgets Qt6::Networ
 if(MSVC)
     target_compile_options(nzis_protocol PUBLIC /utf-8)
 endif()
+if(WIN32)
+    set(APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/app/assets/NHIS-Checker.ico")
+    configure_file(app/windows.rc.in "${CMAKE_CURRENT_BINARY_DIR}/windows.rc" @ONLY)
+    target_sources(NZISSpravki PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/windows.rc")
+endif()
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -53,11 +58,12 @@ else()
 endif()
 
 file(GLOB TOOTH_ASSETS CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "app/ui/teeth/*.svg")
-qt_add_resources(NZISSpravki desktop PREFIX "/" FILES
+set(UI_RESOURCES
     app/ui/index.html app/ui/styles.css app/ui/layout.js app/ui/odontogram.js
-    app/ui/treatments.js app/ui/bridge.js app/ui/lookups.js app/ui/settings.js app/ui/xml-response.js app/ui/nomenclatures.json
+    app/ui/treatments.js app/ui/bridge.js app/ui/notifications.js app/ui/lookups.js app/ui/settings.js app/ui/xml-response.js app/ui/nomenclatures.json
     app/ui/status/done.svg app/ui/status/cancelled.svg app/ui/status/pending.svg app/ui/status/unknown.svg
     ${TOOTH_ASSETS})
+qt_add_resources(NZISSpravki desktop PREFIX "/" FILES ${UI_RESOURCES})
 install(TARGETS NZISSpravki BUNDLE DESTINATION . RUNTIME DESTINATION .)
 
 include(CTest)
@@ -65,4 +71,9 @@ if(BUILD_TESTING)
     add_executable(nzis_protocol_test tests/protocol_signature.cpp)
     target_link_libraries(nzis_protocol_test PRIVATE nzis_protocol)
     add_test(NAME protocol_signature COMMAND nzis_protocol_test)
+    add_executable(nzis_ui_test tests/ui_resources.cpp app/ui.cpp)
+    target_compile_definitions(nzis_ui_test PRIVATE APP_NAME="${APP_NAME}")
+    target_link_libraries(nzis_ui_test PRIVATE Qt6::Widgets)
+    qt_add_resources(nzis_ui_test desktop_test PREFIX "/" FILES ${UI_RESOURCES})
+    add_test(NAME bundled_ui COMMAND nzis_ui_test)
 endif()
