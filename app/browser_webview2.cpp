@@ -1,9 +1,11 @@
 #include "browser.h"
+#include <QDebug>
 #include <QDir>
 #include <QHideEvent>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QPointer>
+#include <QResizeEvent>
 #include <QShowEvent>
 #include <QStandardPaths>
 #include <QTimer>
@@ -19,6 +21,11 @@ using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
 
 constexpr wchar_t pageUrl[] = L"https://nhis-checker.invalid/index.html";
+
+bool isAppDocument(const QString &uri) {
+    const auto page = QString::fromWCharArray(pageUrl);
+    return uri == page || uri == page + "#status" || uri == page + "#treatments";
+}
 
 void check(HRESULT result) {
     if (FAILED(result)) throw result;
@@ -51,6 +58,7 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         status->setAlignment(Qt::AlignCenter);
         status->setWordWrap(true);
+        status->setTextInteractionFlags(Qt::TextSelectableByMouse);
         auto *layout = new QVBoxLayout(this);
         layout->addWidget(status);
         QTimer::singleShot(0, this, [this] { initialize(); });
@@ -84,6 +92,12 @@ protected:
         if (controller && ready) controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     }
 
+    bool event(QEvent *event) override {
+        const bool handled = QWidget::event(event);
+        if (event->type() == QEvent::DevicePixelRatioChange) syncBounds();
+        return handled;
+    }
+
     bool eventFilter(QObject *object, QEvent *event) override {
         if (controller && object == window() && event->type() == QEvent::Move)
             controller->NotifyParentWindowPositionChanged();
@@ -106,6 +120,7 @@ private:
     }
 
     void showFailure(HRESULT result) {
+        qWarning("WebView2 initialization or renderer failure (HRESULT 0x%08lx)", static_cast<unsigned long>(result));
         closeView();
         if (result == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) {
             status->setText(QStringLiteral("Липсва Microsoft Edge WebView2 Runtime.\n"
@@ -209,7 +224,7 @@ private:
         check(view->add_NavigationStarting(
             Callback<ICoreWebView2NavigationStartingEventHandler>(
                 [this](ICoreWebView2 *, ICoreWebView2NavigationStartingEventArgs *args) {
-                    if (readString([args](LPWSTR *uri) { return args->get_Uri(uri); }) != QString::fromWCharArray(pageUrl))
+                    if (!isAppDocument(readString([args](LPWSTR *uri) { return args->get_Uri(uri); })))
                         return args->put_Cancel(TRUE);
                     return args->get_NavigationId(&pageNavigation);
                 }).Get(), &token));
@@ -307,12 +322,12 @@ private:
     }
 
     bool isCurrentPage() const {
-        return view && readString([this](LPWSTR *uri) { return view->get_Source(uri); }) == QString::fromWCharArray(pageUrl);
+        return view && isAppDocument(readString([this](LPWSTR *uri) { return view->get_Source(uri); }));
     }
 
     void receiveMessage(ICoreWebView2WebMessageReceivedEventArgs *args) {
         if (!isCurrentPage() ||
-            readString([args](LPWSTR *source) { return args->get_Source(source); }) != QString::fromWCharArray(pageUrl)) return;
+            !isAppDocument(readString([args](LPWSTR *source) { return args->get_Source(source); }))) return;
         const auto message = readString([args](LPWSTR *json) { return args->get_WebMessageAsJson(json); });
         if (message.size() > 1024 * 1024) return;
         const auto request = QJsonDocument::fromJson(message.toUtf8()).object();
@@ -324,12 +339,15 @@ private:
         QMetaObject::invokeMethod(this, [this, id, action, navigation = pageNavigation,
                                          data = request.value("data").toObject()] {
             if (navigation != pageNavigation || !isCurrentPage()) return;
-            const auto result = handler(action, data);
-            if (navigation != pageNavigation || !isCurrentPage()) return;
+            const QPointer<BrowserWidget> self(this);
+            const auto dispatch = handler;
+            const auto result = dispatch(action, data);
+            if (!self || navigation != pageNavigation || !isCurrentPage()) return;
             const auto encoded = QJsonDocument(result).toJson(QJsonDocument::Compact).toBase64();
             const QJsonObject reply{{"id", id}, {"encoded", QString::fromLatin1(encoded)}};
             const auto json = QString::fromUtf8(QJsonDocument(reply).toJson(QJsonDocument::Compact)).toStdWString();
-            view->PostWebMessageAsJson(json.c_str());
+            const auto posted = view->PostWebMessageAsJson(json.c_str());
+            if (FAILED(posted)) showFailure(posted);
         }, Qt::QueuedConnection);
     }
 };

@@ -66,6 +66,7 @@ Filename: "{app}\NHIS Checker.exe"; Description: "Launch NHIS Checker"; Flags: n
 [Code]
 const
   WebView2Client = 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+  MinimumWebView2Build = 2365;
 
 function HasWebView2Version(RootKey: Integer): Boolean;
 var
@@ -73,7 +74,7 @@ var
   Encoded: Int64;
 begin
   Result := RegQueryStringValue(RootKey, WebView2Client, 'pv', Version) and
-    StrToVersion(Version, Encoded) and (Encoded > 0);
+    StrToVersion(Version, Encoded) and (Encoded >= PackVersionComponents(122, 0, MinimumWebView2Build, 46));
 end;
 
 function HasWebView2: Boolean;

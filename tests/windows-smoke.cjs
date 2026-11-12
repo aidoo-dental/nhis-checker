@@ -14,13 +14,17 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     browserData = await fs.mkdtemp(path.join(os.tmpdir(), 'nhis-webview2-smoke-'));
     env.WEBVIEW2_USER_DATA_FOLDER = browserData;
     env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222';
+    env.QT_FORCE_STDERR_LOGGING = '1';
     delete env.QTWEBENGINE_REMOTE_DEBUGGING;
   }
   const app = spawn(process.argv[2], [], {env, stdio: 'inherit'});
-  let ws;
+  let spawnError, ws;
+  app.on('error', error => { spawnError = error; });
+  const closed = new Promise(resolve => app.once('close', resolve));
   try {
     let target, lastError;
     for (let i=0; i<60; i++) {
+      if (spawnError) throw spawnError;
       if (app.exitCode !== null) throw new Error(`App exited with ${app.exitCode}`);
       try {
         const targets = await (await fetch('http://127.0.0.1:9222/json/list')).json();
@@ -66,6 +70,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await evaluate("location.assign('https://outside.invalid/')");
       await delay(300);
       assert.equal(await evaluate('location.href'), 'https://nhis-checker.invalid/index.html');
+      await evaluate("document.querySelector('#tab-treatments').click()");
+      assert.equal(await evaluate('location.hash'), '#treatments');
+      assert(await evaluate("(async () => (await desktop('settings')).environment === 'test')()"),
+        'Native bridge stopped responding after changing tabs');
       const sample = 'Тест на клипборда';
       await evaluate("desktop('copyErrorLog', {text: " + JSON.stringify(sample) + "})");
       await send('Page.bringToFront');
@@ -73,7 +81,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const paste = {key:'v', code:'KeyV', windowsVirtualKeyCode:86, modifiers:2};
       await send('Input.dispatchKeyEvent', {type:'rawKeyDown', ...paste});
       await send('Input.dispatchKeyEvent', {type:'keyUp', ...paste});
-      assert.equal(await evaluate("document.querySelector('#first-name').value"), sample, 'Clipboard paste into the patient form failed');
+      let pasted;
+      for (let i = 0; i < 20; i++) {
+        pasted = await evaluate("document.querySelector('#first-name').value");
+        if (pasted === sample) break;
+        await delay(100);
+      }
+      assert.equal(pasted, sample, 'Clipboard paste into the patient form failed');
       await evaluate("document.querySelector('#first-name').value = ''");
     }
     assert(await evaluate(`(async()=>{
@@ -137,7 +151,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   } finally {
     if(ws)ws.close();
     app.kill();
-    await new Promise(resolve=>app.exitCode!==null?resolve():app.once('exit',resolve));
+    await closed;
     if (browserData) {
       await fs.rm(browserData, {recursive: true, force: true, maxRetries: 8, retryDelay: 250});
     }
