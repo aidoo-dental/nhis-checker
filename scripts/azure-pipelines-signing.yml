@@ -55,7 +55,7 @@ steps:
         $iscc = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
         if (!(Test-Path $iscc)) { throw 'Inno Setup 6 missing' }
         New-Item dist -ItemType Directory -Force | Out-Null
-        $signCommand = 'pwsh.exe -NoProfile -File "' + "$pwd/scripts/sign-windows-azure.ps1" + '" -Path $f'
+        $signCommand = 'pwsh.exe -NoProfile -File $q' + "$pwd/scripts/sign-windows-azure.ps1" + '$q -Path $f'
         & $iscc '/DSignWithAzure' "/Saidoo=$signCommand" '/DAppVersion=${{ parameters.version }}' "/DPayloadDir=$pwd/payload" "/DOutputDir=$pwd/dist" scripts/windows-installer.iss
         if ($LASTEXITCODE -ne 0) { throw 'Signed installer creation failed' }
   - pwsh: |

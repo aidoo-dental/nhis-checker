@@ -1,0 +1,30 @@
+[
+  {
+    "input": "NHIS Checker 1.0.12 - Apple Silicon.dmg",
+    "input_sha256": "d3a05532e52572bd21affb491bf62345283444276418a3708f28bdf5b65350ae",
+    "version": "1.0.12",
+    "app_submission": "ea6d6ecd-648a-4e5f-bc38-cd06e93f9f4e",
+    "stage": "Complete",
+    "app_notarization": "Accepted",
+    "dmg_submission": "6fe2864f-d1c3-441f-8cc7-a671af2c7484",
+    "dmg_notarization": "Accepted",
+    "sha256": "2369b2cee68ff2c52834221c617da98dd41ceec8877f59bb21b3d0e6f2d01830",
+    "gatekeeper": "accepted",
+    "app_ticket": true,
+    "dmg_ticket": true
+  },
+  {
+    "input": "NHIS Checker 1.0.12 - Intel.dmg",
+    "input_sha256": "feb6333f824516114337ad01d8a42b976f26370ce7e6b1dceba0027a1eac9ea0",
+    "version": "1.0.12",
+    "app_submission": "682865e6-005f-4a64-84a7-24f04958e2c1",
+    "stage": "Complete",
+    "app_notarization": "Accepted",
+    "dmg_submission": "58fe19df-32c9-4151-ae7c-1d3d00dbccc0",
+    "dmg_notarization": "Accepted",
+    "sha256": "1ce43c33fdbceb59359ac3941152203b37e935ec21ccf25d9606a45a015b0aca",
+    "gatekeeper": "accepted",
+    "app_ticket": true,
+    "dmg_ticket": true
+  }
+]

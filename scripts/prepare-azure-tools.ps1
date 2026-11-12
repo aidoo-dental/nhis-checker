@@ -4,7 +4,7 @@ New-Item $Directory -ItemType Directory -Force | Out-Null
 $report = @()
 foreach ($id in @('microsoft.windows.sdk.buildtools','microsoft.artifactsigning.client')) {
     $base = "https://api.nuget.org/v3-flatcontainer/$id"
-    $version = (Invoke-RestMethod "$base/index.json").versions | Where-Object { $_ -match '^\d+\.\d+\.\d+(?:\.\d+)?$' } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
+    $version = if ($id -eq 'microsoft.windows.sdk.buildtools') { '10.0.28000.2705' } else { '1.0.146' }
     $zip = Join-Path $Directory "$id.zip"
     Invoke-WebRequest "$base/$version/$id.$version.nupkg" -OutFile $zip
     $target = Join-Path $Directory $id
