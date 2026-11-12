@@ -2,8 +2,6 @@
 trigger: none
 pr: none
 parameters:
-  - name: payloadUrl
-    type: string
   - name: payloadSha256
     type: string
   - name: sourceCommit
@@ -25,15 +23,20 @@ steps:
       version: 8.0.x
   - pwsh: |
       ./scripts/prepare-azure-tools.ps1 -Directory "$(Agent.TempDirectory)/nhis-sign-tools"
-      $url = '${{ parameters.payloadUrl }}'
-      if ($url -notmatch '^https://github.com/aidoo-dental/nhis-checker/releases/download/v[0-9.]+/NHIS-Checker-[0-9.]+-Windows-signing-payload.zip$') { throw 'Unexpected payload source' }
+      $url = $env:NHIS_PAYLOAD_URL
+      $uri = [uri]$url
+      if ($uri.Scheme -ne 'https' -or $uri.Host -notmatch '^productionresultssa[0-9]+\.blob\.core\.windows\.net$') { throw 'Unexpected artifact source' }
       $hash = '${{ parameters.payloadSha256 }}'
       if ($hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid expected hash' }
-      Invoke-WebRequest $url -OutFile payload.zip
-      if ((Get-FileHash payload.zip -Algorithm SHA256).Hash -ne $hash) { throw 'Payload checksum mismatch' }
+      try { Invoke-WebRequest $url -OutFile artifact.zip } catch { throw 'Could not download the frozen GitHub artifact' }
+      if ((Get-FileHash artifact.zip -Algorithm SHA256).Hash -ne $hash) { throw 'Artifact checksum mismatch' }
+      Expand-Archive artifact.zip artifact
+      Move-Item artifact/NHIS-Checker-Windows-signing-payload.zip payload.zip
       Expand-Archive payload.zip payload
       if ((Get-Item 'payload/NHIS Checker.exe').VersionInfo.ProductVersion -ne '${{ parameters.version }}') { throw 'Unexpected version' }
     displayName: Verify frozen payload and Microsoft signing tools
+    env:
+      NHIS_PAYLOAD_URL: $(nhisPayloadUrl)
   - task: AzureCLI@2
     displayName: Sign application, uninstaller and installer through Azure
     inputs:

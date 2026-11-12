@@ -40,7 +40,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline:2px soli
 .lookup-tabs button[aria-selected="true"] { background:#fafafa; color:var(--ink); border-color:#a3a3a3; font-weight:680 }
 .lookup-tabs button[aria-selected="true"]:hover { background:#f0f0f0 }
 .lookup-tabs button:focus-visible { outline-color:#565656; outline-offset:-3px }
-main { flex:1; min-height:0; width:100%; overflow:auto; overscroll-behavior:contain; padding:24px var(--page-gutter) 30px }
+main { flex:1; min-height:0; width:100%; overflow:auto; overscroll-behavior:contain; padding:0 var(--page-gutter) 30px }
+main > [role="tabpanel"] { padding-top:24px }
 .mainhead { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:19px }
 .mainhead h1 { margin:0; font-size:25px; font-weight:680; line-height:1.2; letter-spacing:-.035em }
 .dim,.hint { color:var(--muted); font-size:12px }
@@ -190,7 +191,7 @@ input,select { width:100%; min-height:35px; border:1px solid #d7d7d7; border-rad
 @media(prefers-reduced-motion:reduce) { .settings-drawer[open],.toast { animation:none } }
 dialog::backdrop { background:rgb(0 0 0 / .22) }
 @media(max-width:660px) {
-  main { padding-top:20px }
+  main > [role="tabpanel"] { padding-top:20px }
   .mainhead { flex-wrap:wrap }
   .formgrid { grid-template-columns:1fr }
   .patient-strip { padding:10px }
