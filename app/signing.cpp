@@ -11,6 +11,7 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QStringList>
+#include <memory>
 #include <vector>
 #include <libp11.h>
 #include <openssl/evp.h>
@@ -18,6 +19,8 @@
 #include <openssl/x509v3.h>
 
 namespace {
+using Certificate = std::unique_ptr<X509, decltype(&X509_free)>;
+
 QStringList defaultDrivers() {
 #ifdef Q_OS_WIN
     const auto windows = qEnvironmentVariable("SystemRoot", QStringLiteral("C:/Windows"));
@@ -45,7 +48,7 @@ struct SigningSession::State {
     unsigned count = 0;
     PKCS11_SLOT *loggedIn = nullptr;
     EVP_PKEY *key = nullptr;
-    X509 *certificate = nullptr;
+    Certificate certificate{nullptr, X509_free};
     QString name;
     bool loaded = false;
     ~State() {
@@ -64,18 +67,25 @@ bool SigningSession::isOpen() const { return bool(state); }
 QString SigningSession::certificateName() const { return state ? state->name : QString(); }
 QByteArray SigningSession::sign(const QByteArray &xml) const {
     if (!state) fail(QStringLiteral("Избери и отключи сертификат за КЕП."));
-    return signEnveloped(xml, state->key, state->certificate);
+    return signEnveloped(xml, state->key, state->certificate.get());
 }
 
 void SigningSession::unlock(QWidget *parent, const QString &driver) {
     if (state) return;
-    struct Candidate { State *module; PKCS11_SLOT *slot; PKCS11_CERT *cert; QString name; };
+    struct Candidate {
+        State *module;
+        PKCS11_SLOT *slot;
+        Certificate cert;
+        QByteArray id;
+        QString name;
+    };
     std::vector<std::unique_ptr<State>> modules;
     std::vector<Candidate> candidates;
     QStringList labels;
     bool driverFound = false;
     bool driverReady = false;
     bool tokenFound = false;
+    bool unreadableCertificate = false;
     const auto paths = driver.isEmpty() ? defaultDrivers() : QStringList{driver};
     for (const QString &path : paths) {
         if (!QFileInfo(path).isFile()) continue;
@@ -103,11 +113,22 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
                 if (!EVP_PKEY_is_a(X509_get0_pubkey(cert), "RSA")) continue;
                 const auto name = certificateField(X509_get_subject_name(cert), NID_commonName);
                 const auto issuer = certificateField(X509_get_issuer_name(cert), NID_commonName);
-                const auto fingerprint = QCryptographicHash::hash(certificateDer(cert), QCryptographicHash::Sha256).toHex().left(12);
+                const auto der = tryCertificateDer(cert);
+                if (der.isEmpty()) {
+                    unreadableCertificate = true;
+                    continue;
+                }
+                const auto fingerprint = QCryptographicHash::hash(der, QCryptographicHash::Sha256).toHex().left(12);
                 const QString label = QStringLiteral("%1 · %2 · %3").arg(name, issuer, QString::fromLatin1(fingerprint));
                 if (labels.contains(label)) continue;
+                if (X509_up_ref(cert) != 1) {
+                    unreadableCertificate = true;
+                    continue;
+                }
                 labels << label;
-                candidates.push_back({module.get(), slot, &certs[i], name.isEmpty() ? label : name});
+                const QByteArray id(reinterpret_cast<const char *>(certs[i].id), qsizetype(certs[i].id_len));
+                candidates.push_back({module.get(), slot, Certificate(cert, X509_free), id,
+                                      name.isEmpty() ? label : name});
             }
         }
         if (!candidates.empty() && candidates.back().module == module.get()) modules.push_back(std::move(module));
@@ -119,6 +140,8 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
             fail(QStringLiteral("Драйверът за КЕП не може да се използва. Провери дали е за архитектурата на приложението."));
         if (!tokenFound)
             fail(QStringLiteral("КЕП токенът не е открит. Включи го и опитай отново."));
+        if (unreadableCertificate)
+            fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
         fail(QStringLiteral("На токена няма достъпен валиден RSA сертификат за подписване. Провери сертификата в приложението на доставчика."));
     }
     qsizetype selected = 0;
@@ -129,7 +152,7 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
         if (!ok) fail(QStringLiteral("Изборът на сертификат е отменен."));
         selected = labels.indexOf(label);
     }
-    const auto candidate = candidates.at(size_t(selected));
+    auto &candidate = candidates.at(size_t(selected));
     auto &module = *candidate.module;
     if (candidate.slot->token->userPinLocked)
         fail(QStringLiteral("ПИН-ът на КЕП е блокиран. Използвай приложението на доставчика за отключване."));
@@ -148,10 +171,25 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
         if (result != 0) fail(QStringLiteral("Токенът отказа вход. Провери ПИН-а и оставащите опити."));
     }
     module.loggedIn = candidate.slot;
-    auto *privateKey = PKCS11_find_key(candidate.cert);
+    // libp11 owns the certificate list and can refresh it when a session changes.
+    PKCS11_CERT *certs = nullptr;
+    unsigned certCount = 0;
+    PKCS11_CERT *selectedCert = nullptr;
+    if (PKCS11_enumerate_certs(candidate.slot->token, &certs, &certCount) == 0) {
+        for (unsigned i = 0; i < certCount; ++i) {
+            const QByteArray id = QByteArray::fromRawData(reinterpret_cast<const char *>(certs[i].id),
+                                                          qsizetype(certs[i].id_len));
+            if (id == candidate.id && certs[i].x509 && X509_cmp(certs[i].x509, candidate.cert.get()) == 0) {
+                selectedCert = &certs[i];
+                break;
+            }
+        }
+    }
+    if (!selectedCert) fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
+    auto *privateKey = PKCS11_find_key(selectedCert);
     if (!privateKey || !(module.key = PKCS11_get_private_key(privateKey)))
         fail(QStringLiteral("Избраният сертификат няма достъпен частен ключ."));
-    module.certificate = candidate.cert->x509;
+    module.certificate = std::move(candidate.cert);
     module.name = candidate.name;
     for (auto &entry : modules)
         if (entry.get() == &module) { state = std::move(entry); break; }
