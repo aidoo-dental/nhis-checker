@@ -91,7 +91,7 @@ get('check-sign').addEventListener('click', async () => {
   try {
     const result = await desktop('checkSignature');
     setNotice('settings', 'Успешен пробен подпис · ' + result.certificate, 'done');
-  } catch (error) { setNotice('settings', error.message, 'cancelled'); }
+  } catch (error) { setNotice('settings', error.message, 'cancelled', 'checkSignature'); }
 });
 get('lock-sign').addEventListener('click', async () => {
   try {
