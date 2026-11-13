@@ -7,18 +7,21 @@ import {pathToFileURL} from 'node:url';
 
 const repository = 'aidoo-dental/nhis-checker';
 const workflow = '.github/workflows/windows.yml';
-const artifactName = 'NHIS-Checker-Windows-signing-payload';
 const maxBytes = 512 * 1024 * 1024;
 
 export async function verifyPayload(approval, token, output, request = fetch) {
-  const {runId, artifactId, commit, digest, version} = approval;
-  if (!Number.isSafeInteger(runId) || runId <= 0 ||
+  const {runId, artifactId, commit, digest, version, variant = 'release'} = approval;
+  const preview = variant === 'webview2-preview';
+  if ((variant !== 'release' && !preview) || !Number.isSafeInteger(runId) || runId <= 0 ||
       !Number.isSafeInteger(artifactId) || artifactId <= 0 ||
       typeof commit !== 'string' || !/^[a-f0-9]{40}$/.test(commit) ||
       typeof digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(digest) ||
       typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
     throw new Error('Invalid committed signing approval');
 
+  const branch = preview ? 'prototype/windows-webview2' : 'main';
+  const artifactName = preview ? 'NHIS-Checker-Windows-WebView2-signing-payload'
+    : 'NHIS-Checker-Windows-signing-payload';
   const github = (path) => request('https://api.github.com/repos/' + repository + path, {
     headers: {
       Authorization: 'Bearer ' + token,
@@ -36,7 +39,7 @@ export async function verifyPayload(approval, token, output, request = fetch) {
   const [run, artifact] = await Promise.all([runResponse.json(), artifactResponse.json()]);
   if (run.id !== runId || run.repository?.full_name !== repository ||
       run.head_repository?.full_name !== repository || run.path !== workflow ||
-      run.head_branch !== 'main' || run.event !== 'push' || run.conclusion !== 'success' ||
+      run.head_branch !== branch || run.event !== 'push' || run.conclusion !== 'success' ||
       run.head_sha !== commit || artifact.id !== artifactId || artifact.name !== artifactName ||
       artifact.expired !== false || artifact.workflow_run?.id !== runId ||
       artifact.workflow_run?.head_sha !== commit || artifact.digest !== digest ||

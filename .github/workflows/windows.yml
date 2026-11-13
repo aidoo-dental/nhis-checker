@@ -114,12 +114,26 @@ jobs:
           node tests/windows-smoke.cjs "$install/NHIS Checker.exe" $env:NHIS_WEBVIEW2_PREVIEW
           $p = Start-Process "$install/unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path "$install/NHIS Checker.exe")) { throw 'Uninstall failed' }
+      - name: Check binaries and freeze the WebView2 preview payload
+        if: github.event_name == 'push' && env.NHIS_WEBVIEW2_PREVIEW == 'ON'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $binaries = Get-ChildItem build-win/payload -Recurse -File |
+            Where-Object { $_.Extension -in '.exe', '.dll' }
+          foreach ($binary in $binaries) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $binary.FullName
+            Write-Host "$($binary.Name): $($signature.Status) ($($signature.SignatureType))"
+            if ($signature.Status -notin 'Valid', 'NotSigned') {
+              throw "Invalid signature on $($binary.Name): $($signature.Status)"
+            }
+          }
+          Compress-Archive -Path build-win/payload,.deps/MicrosoftEdgeWebview2Setup.exe -DestinationPath dist/NHIS-Checker-Windows-WebView2-signing-payload.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: env.NHIS_WEBVIEW2_PREVIEW == 'ON'
+        if: github.event_name == 'push' && env.NHIS_WEBVIEW2_PREVIEW == 'ON'
         with:
-          name: NHIS-Checker-Windows-WebView2-Preview
+          name: NHIS-Checker-Windows-WebView2-signing-payload
           retention-days: 3
-          path: dist/*-WebView2-Preview-Setup.exe
+          path: dist/NHIS-Checker-Windows-WebView2-signing-payload.zip
           if-no-files-found: error
           compression-level: 0
       - name: Freeze payload for Azure signing

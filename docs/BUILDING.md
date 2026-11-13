@@ -58,4 +58,4 @@ windeployqt --release --compiler-runtime "dist/windows-x64/NHIS Checker.exe"
 
 Бранчът `prototype/windows-webview2` пакетира същия HTML интерфейс с Microsoft Edge WebView2 Evergreen. Билдът използва Qt Widgets, Network и Xml и изисква разархивирания пакет `Microsoft.Web.WebView2` за x64. Към CMake добави `-DNHIS_WEBVIEW2_PREVIEW=ON` и `-DWEBVIEW2_SDK_DIR=<път>`. При пакетиране подай `-WebView2Bootstrapper <път до MicrosoftEdgeWebview2Setup.exe>`.
 
-GitHub Actions качва EXE файла от тестовия бранч като артефакт `NHIS-Checker-Windows-WebView2-Preview`. Инсталацията и настройките на preview версията са отделни. При липсващ WebView2 Runtime инсталаторът стартира инсталатора на Microsoft, който изисква интернет.
+GitHub Actions качва проверения пакет за Azure подписване като артефакт `NHIS-Checker-Windows-WebView2-signing-payload`. Инсталаторът за тест се взема след [подписването](RELEASING.md). Инсталацията и настройките на preview версията са отделни. При липсващ WebView2 Runtime инсталаторът стартира инсталатора на Microsoft, който изисква интернет.
