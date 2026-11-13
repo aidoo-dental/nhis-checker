@@ -99,6 +99,18 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return document.querySelector('#view-settings').open && log.includes('E003') && log.includes('HTTP 400') &&
         !log.includes('Installer smoke test') && !!document.querySelector('.toast');
     })()`),'Drawer, native journal or toast failed');
+    assert(await evaluate(`(async()=>{
+      const prefs = {lpk:'123456789', practice:'1234567890', environment:'production', driver:'', remember:true};
+      const saved = await desktop('saveSettings', prefs);
+      const readBack = await desktop('settings');
+      setNotice('settings','Сертификатът не може да бъде прочетен.','cancelled','checkSignature');
+      await errorLogQueue;
+      const log = document.querySelector('#error-log').value.split('\\n\\n')[0];
+      await desktop('saveSettings', {...prefs, environment:'test'});
+      return saved.environment === 'production' && readBack.environment === 'production' &&
+        log.includes('Локален пробен подпис') && log.includes('Сертификатът не може да бъде прочетен.') &&
+        !log.includes('Тестова среда') && !log.includes('Продукционна среда');
+    })()`),'The local certificate check must be logged independently of the saved NHIS environment');
     await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await evaluate("document.querySelector('#view-settings').open"),false);
