@@ -127,6 +127,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     })()`), 'Settings fallback did not open and close');
     assert(await evaluate(`(() => {
       const day = '2026-01-02';
+      showView('status');
       get('view-status').querySelector('[data-result]').hidden = false;
       displayDentition({date:'2026-01-03',history:[],current:[
         {fdi:'11',date:day,conditions:['E']}, {fdi:'51',date:day,conditions:['O']},
