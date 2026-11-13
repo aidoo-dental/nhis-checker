@@ -43,13 +43,16 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
         auto entries = QJsonDocument::fromJson(config.value("errorLogV2").toByteArray()).array();
         if (action == "logError" && !field("message").isEmpty()) {
             const auto view = field("view");
-            const auto context = view == "status" ? QStringLiteral("Дентален статус")
+            const bool localKep = view == "settings" && field("operation") == "checkSignature";
+            const auto context = localKep ? QStringLiteral("Проверка на КЕП")
+                : view == "status" ? QStringLiteral("Дентален статус")
                 : view == "treatments" ? QStringLiteral("Лечения")
                 : view == "settings" ? QStringLiteral("Настройки") : QStringLiteral("Пациент");
             QStringList details;
             static const QRegularExpression metadata(QStringLiteral(
                 R"(\A(?:Код [A-Z][0-9]{3}|Заявка D00[59] · ID [0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|Неуспешна дентална справка D00[59] \(HTTP [1-5][0-9]{2}\)\.|НЗИС върна грешка \([A-Z]099\)\.|НЗИС върна неочакван тип отговор\. Очаква се D0(?:06|10)\.)\z)"));
             static const QStringList knownReasons{
+                QStringLiteral("Сертификатът не може да бъде прочетен."),
                 QStringLiteral("НЗИС върна празен отговор. Повтори справката."),
                 QStringLiteral("НЗИС върна отговор в неочакван формат. Очаква се XML съобщение."),
                 QStringLiteral("В XML отговора на НЗИС липсва типът на съобщението."),
@@ -69,7 +72,7 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
                 {"context", context},
                 {"message", details.isEmpty() ? QStringLiteral("Операцията е неуспешна.") : details.join('\n')},
                 {"version", APP_VERSION},
-                {"environment", config.value("environment", "test").toString()}});
+                {"environment", localKep ? QStringLiteral("local") : config.value("environment", "test").toString()}});
             while (entries.size() > 100) entries.removeLast();
         }
         if (action == "clearErrorLog") entries = {};

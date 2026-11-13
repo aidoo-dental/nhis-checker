@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string]$DepsDir,
     [Parameter(Mandatory)][string]$LibP11Dir,
     [string]$OpenSSLDir = $DepsDir,
-    [string]$OutputDir = "$PSScriptRoot/../dist"
+    [string]$OutputDir = "$PSScriptRoot/../dist",
+    [string]$WebView2Bootstrapper
 )
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
@@ -41,8 +42,22 @@ foreach ($dependency in @('libxml2','zlib','libiconv')) {
     }
 }
 Copy-Item "$LibP11Dir/COPYING" "$licenses/libp11.txt"
-# windeployqt includes Chromium's third-party notices with the WebEngine resources.
-foreach ($required in @('Qt6Core.dll','Qt6WebEngineCore.dll','QtWebEngineProcess.exe','platforms/qwindows.dll','resources/icudtl.dat','resources/qtwebengine_resources.pak','libp11.dll','msvcp140.dll')) {
+$requiredFiles = @('Qt6Core.dll','platforms/qwindows.dll','libp11.dll','msvcp140.dll')
+$webEngineFiles = @('Qt6WebEngineCore.dll','QtWebEngineProcess.exe','resources/icudtl.dat','resources/qtwebengine_resources.pak')
+if ($WebView2Bootstrapper) {
+    $WebView2Bootstrapper = (Resolve-Path $WebView2Bootstrapper).Path
+    $signature = Get-AuthenticodeSignature -FilePath $WebView2Bootstrapper
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(,|$)') {
+        throw 'The WebView2 bootstrapper must have a valid Microsoft signature.'
+    }
+    $requiredFiles += @('WebView2Loader.dll','licenses/webview2-sdk.txt')
+    foreach ($file in $webEngineFiles) {
+        if (Test-Path "$payload/$file") { throw "Unexpected WebEngine file in WebView2 package: $file" }
+    }
+} else {
+    $requiredFiles += $webEngineFiles
+}
+foreach ($required in $requiredFiles) {
     if (!(Test-Path "$payload/$required")) { throw "Missing deployed dependency: $required" }
 }
 $version = (Get-Item $exe).VersionInfo.ProductVersion
@@ -51,5 +66,14 @@ New-Item $OutputDir -ItemType Directory -Force | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
 $iscc = "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe"
 if (!(Test-Path $iscc)) { throw 'Install Inno Setup 6 before packaging.' }
-& $iscc "/DAppVersion=$version" "/DPayloadDir=$payload" "/DOutputDir=$OutputDir" "$PSScriptRoot/windows-installer.iss"
-Get-FileHash "$OutputDir/NHIS Checker $version - Windows x64 Setup.exe" -Algorithm SHA256
+$installerArgs = @("/DAppVersion=$version", "/DPayloadDir=$payload", "/DOutputDir=$OutputDir")
+$installerName = "NHIS Checker $version - Windows x64 Setup.exe"
+if ($WebView2Bootstrapper) {
+    $installerArgs += "/DWebView2Bootstrapper=$WebView2Bootstrapper"
+    $installerName = "NHIS-Checker-$version-Windows-x64-WebView2-Preview-Setup.exe"
+}
+& $iscc @installerArgs "$PSScriptRoot/windows-installer.iss"
+$installer = Get-Item "$OutputDir/$installerName"
+Get-FileHash $installer.FullName -Algorithm SHA256
+Write-Host "Installer bytes: $($installer.Length)"
+Write-Host "Application payload bytes: $((Get-ChildItem $payload -File -Recurse | Measure-Object Length -Sum).Sum)"

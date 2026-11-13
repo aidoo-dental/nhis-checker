@@ -35,6 +35,9 @@ test('only the approved run and matching immutable archive are accepted', async 
     for (const fixture of [
       {runData: {...run, head_repository: {full_name: 'unapproved/repository'}}},
       {runData: {...run, conclusion: 'failure'}},
+      {runData: {...run, event: 'workflow_dispatch'}},
+      {runData: {...run, head_sha: 'b'.repeat(40)}},
+      {artifactData: {...artifact, name: 'NHIS-Checker-Windows-WebView2-Preview'}},
       {artifactData: {...artifact, workflow_run: {...artifact.workflow_run, id: 99}}},
       {artifactData: {...artifact, digest: 'sha256:' + 'b'.repeat(64)}},
       {archive: Buffer.alloc(bytes.length)}
@@ -43,6 +46,23 @@ test('only the approved run and matching immutable archive are accepted', async 
       await assert.rejects(stat(output), {code: 'ENOENT'});
     }
     await verifyPayload(approval, 'test', output, githubFixture());
+    assert.deepEqual(await readFile(output), bytes);
+  } finally { await rm(dir, {recursive: true, force: true}); }
+});
+
+test('preview approval accepts only its own branch and signing payload', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'nhis-preview-signing-test-'));
+  const output = join(dir, 'artifact.zip');
+  const preview = {...approval, variant: 'webview2-preview'};
+  const runData = {...run, head_branch: 'prototype/windows-webview2'};
+  const artifactData = {...artifact, name: 'NHIS-Checker-Windows-WebView2-signing-payload'};
+  try {
+    await assert.rejects(verifyPayload(approval, 'test', output, githubFixture({runData, artifactData})), /match/);
+    await assert.rejects(verifyPayload(preview, 'test', output, githubFixture({artifactData})), /match/);
+    await assert.rejects(verifyPayload(preview, 'test', output, githubFixture({runData})), /match/);
+    await assert.rejects(verifyPayload({...preview, variant: 'unknown'}, 'test', output), /Invalid/);
+    await assert.rejects(stat(output), {code: 'ENOENT'});
+    await verifyPayload(preview, 'test', output, githubFixture({runData, artifactData}));
     assert.deepEqual(await readFile(output), bytes);
   } finally { await rm(dir, {recursive: true, force: true}); }
 });

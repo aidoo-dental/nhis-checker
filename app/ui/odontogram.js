@@ -95,6 +95,12 @@ function showToothTooltip(button, tooth, codes) {
   showConditionCodes(get('tooth-tooltip-conditions'), codes);
   tooltip.hidden = false;
 
+  positionChartTooltip(tooltip, button);
+  toothTooltipAnchor = button;
+  button.setAttribute('aria-describedby', tooltip.id);
+}
+
+function positionChartTooltip(tooltip, button) {
   const margin = 8;
   const anchor = button.getBoundingClientRect();
   const { width, height } = tooltip.getBoundingClientRect();
@@ -105,8 +111,6 @@ function showToothTooltip(button, tooth, codes) {
     ? below : Math.max(margin, anchor.top - height - margin);
   tooltip.style.left = Math.max(margin, Math.min(left, viewport.clientWidth - width - margin)) + 'px';
   tooltip.style.top = top + 'px';
-  toothTooltipAnchor = button;
-  button.setAttribute('aria-describedby', tooltip.id);
 }
 
 function updateToothSummary(codes) {
@@ -116,12 +120,20 @@ function updateToothSummary(codes) {
   showConditionCodes(get('selected-conditions'), codes);
 }
 
-function selectTooth(button, tooth, codes) {
-  document.querySelectorAll('.tooth[aria-pressed="true"]').forEach((item) => item.setAttribute('aria-pressed','false'));
-  button.setAttribute('aria-pressed','true');
+function selectTooth(button, tooth = null, codes) {
+  get('view-status').querySelectorAll('.tooth[aria-pressed="true"]').forEach(item => {
+    item.setAttribute('aria-pressed', 'false');
+  });
   selectedTooth = tooth;
+  if (button) button.setAttribute('aria-pressed', 'true');
   updateToothSummary(codes);
 }
+
+document.addEventListener('click', event => {
+  if (selectedTooth === null || event.target.closest('#dentition-chart, #additional-teeth')) return;
+  selectTooth(null);
+  hideToothTooltip();
+}, true);
 
 function renderOdontogram(statuses) {
   hideToothTooltip();
@@ -140,12 +152,12 @@ function renderOdontogram(statuses) {
       button.type = 'button';
       button.className = 'tooth' + (codes.includes('E') ? ' missing' : '') + (codes.length ? '' : ' unreported');
       button.setAttribute('aria-label', 'Зъб ' + tooth + (codes.length ? ', ' + codes.join(', ') : ', няма подаден статус'));
-      button.setAttribute('aria-pressed', String(tooth === selectedTooth));
+      button.setAttribute('aria-pressed', String(String(tooth) === selectedTooth));
       const number = document.createElement('span');
       number.className = 'tooth-number';
       number.textContent = tooth;
       button.append(makeToothArt(tooth, codes, index < 2), number);
-      button.addEventListener('click', () => selectTooth(button, tooth, codes));
+      button.addEventListener('click', () => selectTooth(button, String(tooth), codes));
       button.addEventListener('pointerenter', (event) => {
         if (event.pointerType !== 'touch') showToothTooltip(button, tooth, codes);
       });
@@ -169,8 +181,8 @@ function renderOdontogram(statuses) {
     button.className = 'control tooth';
     button.textContent = tooth;
     button.setAttribute('aria-label', 'Зъб ' + tooth + (codes.length ? ', ' + codes.join(', ') : ', няма подаден статус'));
-    button.setAttribute('aria-pressed', String(tooth === selectedTooth));
-    button.addEventListener('click', () => selectTooth(button, tooth, codes));
+    button.setAttribute('aria-pressed', String(String(tooth) === selectedTooth));
+    button.addEventListener('click', () => selectTooth(button, String(tooth), codes));
     additional.append(button);
   }
   get('additional-teeth-section').hidden = additional.childElementCount === 0;
@@ -179,7 +191,7 @@ function showDentitionDate(date) {
   const statuses = dentitionByDate.get(date);
   if (!statuses) return;
   renderOdontogram(statuses);
-  updateToothSummary(statuses.get(String(selectedTooth)));
+  updateToothSummary(statuses.get(selectedTooth));
   for (const button of get('dentition-timeline').querySelectorAll('button')) {
     button.setAttribute('aria-pressed', String(button.dataset.date === date));
   }
@@ -188,28 +200,48 @@ function showDentitionDate(date) {
   get('chart-date').textContent = caption + (date ? ' · ' + formatDate(date) : '');
 }
 
+const dateTooltip = document.createElement('div');
+dateTooltip.className = 'tooth-tooltip';
+dateTooltip.setAttribute('aria-hidden', 'true');
+dateTooltip.hidden = true;
+get('view-status').append(dateTooltip);
+let dateTooltipAnchor = null;
+
+function hideDateTooltip(button = dateTooltipAnchor) {
+  if (button !== dateTooltipAnchor) return;
+  dateTooltip.hidden = true;
+  dateTooltipAnchor = null;
+}
+
 function renderDentitionTimeline() {
   const timeline = get('dentition-timeline');
+  hideDateTooltip();
   timeline.replaceChildren();
   for (const date of [...dentitionByDate.keys()].filter(Boolean).sort()) {
-    const statuses = dentitionByDate.get(date);
     const point = document.createElement('li');
     const button = document.createElement('button');
+    const label = formatDate(date) + (date === chartDate ? ' · Актуален статус' : '');
     button.type = 'button';
     button.dataset.date = date;
+    button.setAttribute('aria-label', label);
+    const showDateTooltip = () => {
+      dateTooltipAnchor = button;
+      dateTooltip.textContent = label;
+      dateTooltip.hidden = false;
+      positionChartTooltip(dateTooltip, button);
+    };
     button.addEventListener('click', () => showDentitionDate(date));
-    const time = document.createElement('time');
-    time.dateTime = date;
-    time.textContent = formatDate(date);
-    const note = document.createElement('span');
-    note.textContent = date === chartDate ? 'Актуален' :
-      statuses.size === 1 ? '1 зъб с данни' : statuses.size + ' зъба с данни';
-    button.append(time, note);
+    button.addEventListener('pointerenter', event => {
+      if (event.pointerType !== 'touch') showDateTooltip();
+    });
+    button.addEventListener('pointerleave', () => hideDateTooltip(button));
+    button.addEventListener('focus', showDateTooltip);
+    button.addEventListener('blur', () => hideDateTooltip(button));
     point.append(button);
     timeline.append(point);
   }
+  requestAnimationFrame(() => { timeline.scrollLeft = timeline.scrollWidth; });
 }
-
 
 function displayDentition({current, history, date}) {
   selectedTooth = null;
@@ -237,8 +269,15 @@ function displayDentition({current, history, date}) {
   showDentitionDate(chartDate);
 }
 
-window.addEventListener('scroll', () => hideToothTooltip(), true);
-window.addEventListener('resize', () => hideToothTooltip());
-window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') hideToothTooltip();
+function hideChartTooltips() {
+  hideToothTooltip();
+  hideDateTooltip();
+}
+
+window.addEventListener('scroll', hideChartTooltips, true);
+window.addEventListener('resize', hideChartTooltips);
+window.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  hideChartTooltips();
+  if (selectedTooth !== null && !get('view-settings').hasAttribute('open')) selectTooth(null);
 });

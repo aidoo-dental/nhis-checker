@@ -9,7 +9,11 @@ int main(int argc, char **argv) {
     QApplication application(argc, argv);
     application.setOrganizationName("NZIS Spravki");
     application.setOrganizationDomain("bg.nzis.spravki");
+#ifdef NHIS_WEBVIEW2_PREVIEW
+    application.setApplicationName("NHIS Checker WebView2 Preview");
+#else
     application.setApplicationName("NZIS Spravki");
+#endif
     application.setApplicationDisplayName(QStringLiteral(APP_NAME));
     application.setApplicationVersion(APP_VERSION);
     QMainWindow window;

@@ -92,12 +92,15 @@ input,select { width:100%; min-height:35px; border:1px solid #d7d7d7; border-rad
 .procedure-code { flex:none; padding:3px 5px; border-radius:4px; color:#22465a; background:#eaf1f5; white-space:nowrap }
 .dentition-history { margin-top:16px; padding-top:12px; border-top:1px solid var(--line) }
 .dentition-history h2 { font-size:15px; margin:0 0 8px }
-.timeline { display:flex; flex-wrap:wrap; gap:7px; list-style:none; margin:0; padding:0 }
-.timeline button { display:grid; gap:1px; text-align:left; border:1px solid #ddd; border-radius:5px; background:#fff; color:var(--ink); padding:5px 9px }
-.timeline button:hover { background:var(--soft) }
-.timeline button[aria-pressed="true"] { background:var(--soft); border-color:#303030 }
-.timeline time { font-weight:650; font-variant-numeric:tabular-nums }
-.timeline span { color:var(--muted); font-size:11px }
+.timeline { display:flex; overflow-x:auto; list-style:none; margin:0; padding:4px 2px 8px }
+.timeline li { position:relative; flex:none }
+.timeline li + li::before { content:""; position:absolute; inset:calc(50% - 1px) 50% auto -50%; height:2px; background:#d1d1d1; pointer-events:none }
+.timeline button { position:relative; display:grid; place-items:center; width:34px; height:30px; padding:0; border:0; border-radius:4px; background:transparent; color:var(--muted) }
+.timeline button::before { content:""; width:13px; height:13px; border:2px solid currentColor; border-radius:50%; background:#fff }
+.timeline button:hover { color:var(--ink) }
+.timeline button[aria-pressed="true"] { color:#3778b7 }
+.timeline button[aria-pressed="true"]::before { background:currentColor }
+.timeline button:focus-visible { outline-offset:-2px }
 .detail-list { display:flex; flex-wrap:wrap; gap:6px }
 .tag { display:inline-flex; gap:5px; border:1px solid var(--line); border-radius:4px; padding:3px 6px; font-size:12px }
 .tag b,.code { font:12px ui-monospace,monospace }

@@ -1,25 +1,39 @@
 const {spawn} = require('node:child_process');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   const env = {...process.env, PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`,
     QTWEBENGINE_REMOTE_DEBUGGING: '127.0.0.1:9222'};
   for (const key of ['QT_PLUGIN_PATH','QT_QPA_PLATFORM_PLUGIN_PATH','QML2_IMPORT_PATH','QTWEBENGINEPROCESS_PATH']) delete env[key];
+  const webview2 = process.argv[3] === 'ON';
+  let browserData;
+  if (webview2) {
+    browserData = await fs.mkdtemp(path.join(os.tmpdir(), 'nhis-webview2-smoke-'));
+    env.WEBVIEW2_USER_DATA_FOLDER = browserData;
+    env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222';
+    env.QT_FORCE_STDERR_LOGGING = '1';
+    delete env.QTWEBENGINE_REMOTE_DEBUGGING;
+  }
   const app = spawn(process.argv[2], [], {env, stdio: 'inherit'});
-  let ws;
+  let spawnError, ws;
+  app.on('error', error => { spawnError = error; });
+  const closed = new Promise(resolve => app.once('close', resolve));
   try {
     let target, lastError;
     for (let i=0; i<60; i++) {
+      if (spawnError) throw spawnError;
       if (app.exitCode !== null) throw new Error(`App exited with ${app.exitCode}`);
       try {
         const targets = await (await fetch('http://127.0.0.1:9222/json/list')).json();
-        target = targets.find(t => t.type === 'page');
+        target = targets.find(t => t.type === 'page' && (!webview2 || t.url === 'https://nhis-checker.invalid/index.html'));
         if (target) break;
       } catch (e) { lastError = e.message; }
       await delay(500);
     }
-    assert(target, `No WebEngine page: ${lastError}`);
+    assert(target, `No application page: ${lastError}`);
     // Qt exposes page targets; connect directly without full Chrome browser commands.
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve,reject) => {ws.onopen=resolve;ws.onerror=reject;});
@@ -51,6 +65,31 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await delay(500);
     }
     assert(ready,'Native settings bridge did not initialize');
+    if (webview2) {
+      assert(await evaluate("!!window.chrome?.webview && !window.qt?.webChannelTransport"));
+      await evaluate("location.assign('https://outside.invalid/')");
+      await delay(300);
+      assert.equal(await evaluate('location.href'), 'https://nhis-checker.invalid/index.html');
+      await evaluate("document.querySelector('#tab-treatments').click()");
+      assert.equal(await evaluate('location.hash'), '#treatments');
+      assert(await evaluate("(async () => (await desktop('settings')).environment === 'test')()"),
+        'Native bridge stopped responding after changing tabs');
+      const sample = 'Тест на клипборда';
+      await evaluate("desktop('copyErrorLog', {text: " + JSON.stringify(sample) + "})");
+      await send('Page.bringToFront');
+      await evaluate("document.querySelector('#first-name').focus()");
+      const paste = {key:'v', code:'KeyV', windowsVirtualKeyCode:86, modifiers:2};
+      await send('Input.dispatchKeyEvent', {type:'rawKeyDown', ...paste});
+      await send('Input.dispatchKeyEvent', {type:'keyUp', ...paste});
+      let pasted;
+      for (let i = 0; i < 20; i++) {
+        pasted = await evaluate("document.querySelector('#first-name').value");
+        if (pasted === sample) break;
+        await delay(100);
+      }
+      assert.equal(pasted, sample, 'Clipboard paste into the patient form failed');
+      await evaluate("document.querySelector('#first-name').value = ''");
+    }
     assert(await evaluate(`(async()=>{
       document.querySelector('#open-settings').click();
       await desktop('clearErrorLog');
@@ -60,6 +99,18 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return document.querySelector('#view-settings').open && log.includes('E003') && log.includes('HTTP 400') &&
         !log.includes('Installer smoke test') && !!document.querySelector('.toast');
     })()`),'Drawer, native journal or toast failed');
+    assert(await evaluate(`(async()=>{
+      const prefs = {lpk:'123456789', practice:'1234567890', environment:'production', driver:'', remember:true};
+      const saved = await desktop('saveSettings', prefs);
+      const readBack = await desktop('settings');
+      setNotice('settings','Сертификатът не може да бъде прочетен.','cancelled','checkSignature');
+      await errorLogQueue;
+      const log = document.querySelector('#error-log').value.split('\\n\\n')[0];
+      await desktop('saveSettings', {...prefs, environment:'test'});
+      return saved.environment === 'production' && readBack.environment === 'production' &&
+        log.includes('Локален пробен подпис') && log.includes('Сертификатът не може да бъде прочетен.') &&
+        !log.includes('Тестова среда') && !log.includes('Продукционна среда');
+    })()`),'The local certificate check must be logged independently of the saved NHIS environment');
     await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     assert.equal(await evaluate("document.querySelector('#view-settings').open"),false);
@@ -76,14 +127,38 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     })()`), 'Settings fallback did not open and close');
     assert(await evaluate(`(() => {
       const day = '2026-01-02';
+      showView('status');
+      get('view-status').querySelector('[data-result]').hidden = false;
       displayDentition({date:'2026-01-03',history:[],current:[
         {fdi:'11',date:day,conditions:['E']}, {fdi:'51',date:day,conditions:['O']},
         {fdi:'11.1',date:day,conditions:['C']}
       ]});
-      const additional = [...get('additional-teeth').children].map(button => button.textContent);
-      return additional.includes('51') && additional.includes('11.1') &&
-        dentitionByDate.get(day).size === 3;
-    })()`), 'Mixed dentition or supernumerary tooth disappeared');
+      const additional = [...get('additional-teeth').children];
+      const tooth = get('upper').querySelector('button[aria-label^="Зъб 11,"]');
+      tooth.click();
+      const selected = tooth.getAttribute('aria-pressed') === 'true' && !get('tooth-summary').hidden;
+      get('dentition-chart').click();
+      const inside = tooth.getAttribute('aria-pressed') === 'true';
+      get('chart-date').click();
+      const cleared = tooth.getAttribute('aria-pressed') === 'false' && get('tooth-summary').hidden;
+      additional[0].click();
+      const extraSelected = additional[0].getAttribute('aria-pressed') === 'true';
+      const [earlier, latest] = get('dentition-timeline').querySelectorAll('button');
+      const dates = earlier.dataset.date === day && latest.dataset.date === '2026-01-03' &&
+        latest.getAttribute('aria-pressed') === 'true';
+      earlier.dispatchEvent(new PointerEvent('pointerenter', {pointerType:'mouse'}));
+      const hover = !dateTooltip.hidden && dateTooltip.textContent === '02.01.2026';
+      earlier.dispatchEvent(new PointerEvent('pointerleave', {pointerType:'mouse'}));
+      const left = dateTooltip.hidden;
+      earlier.focus();
+      const focus = !dateTooltip.hidden && dateTooltip.textContent === '02.01.2026';
+      earlier.click();
+      const historical = earlier.getAttribute('aria-pressed') === 'true' &&
+        get('dentition-chart').classList.contains('is-historical') && get('tooth-summary').hidden;
+      return additional.map(button => button.textContent).includes('51') &&
+        additional.map(button => button.textContent).includes('11.1') && dentitionByDate.get(day).size === 3 &&
+        selected && inside && cleared && extraSelected && dates && hover && left && focus && historical;
+    })()`), 'Odontogram selection, additional teeth or status timeline failed');
     assert(await evaluate(`(async()=>{document.querySelector('#open-settings').click();document.querySelector('#clear-errors').click();await errorLogQueue;return document.querySelector('#error-log').value==='';})()`));
     await evaluate(`(() => {
       document.querySelector('#view-settings').close();
@@ -108,10 +183,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     const screenshot=await send('Page.captureScreenshot',{format:'png'});
     await fs.writeFile('build-win/windows-installed.png',Buffer.from(screenshot.data,'base64'));
     assert.deepEqual(errors,[]);
-    console.log('PASS: installed app, WebEngine, native bridge, drawer, toast, journal and clear');
+    console.log(`PASS: installed app, ${webview2 ? 'WebView2' : 'WebEngine'}, native bridge, drawer, toast and journal`);
   } finally {
     if(ws)ws.close();
     app.kill();
-    await new Promise(resolve=>app.exitCode!==null?resolve():app.once('exit',resolve));
+    await closed;
+    if (browserData) {
+      await fs.rm(browserData, {recursive: true, force: true, maxRetries: 8, retryDelay: 250});
+    }
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});

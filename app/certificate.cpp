@@ -1,14 +1,20 @@
 #include "certificate.h"
 #include "error.h"
 
-QByteArray certificateDer(X509 *cert) {
+QByteArray tryCertificateDer(X509 *cert) {
     const int size = i2d_X509(cert, nullptr);
-    if (size <= 0) fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
+    if (size <= 0) return {};
     QByteArray result(size, Qt::Uninitialized);
     auto *cursor = reinterpret_cast<unsigned char *>(result.data());
-    if (i2d_X509(cert, &cursor) != size) fail(QStringLiteral("Невалиден сертификат."));
+    if (i2d_X509(cert, &cursor) != size) return {};
     return result;
 }
+QByteArray certificateDer(X509 *cert) {
+    const auto result = tryCertificateDer(cert);
+    if (result.isEmpty()) fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
+    return result;
+}
+
 QString certificateField(X509_NAME *name, int nid) {
     int index = X509_NAME_get_index_by_NID(name, nid, -1);
     if (index < 0) return {};
