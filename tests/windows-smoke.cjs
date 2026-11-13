@@ -127,14 +127,37 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     })()`), 'Settings fallback did not open and close');
     assert(await evaluate(`(() => {
       const day = '2026-01-02';
+      get('view-status').querySelector('[data-result]').hidden = false;
       displayDentition({date:'2026-01-03',history:[],current:[
         {fdi:'11',date:day,conditions:['E']}, {fdi:'51',date:day,conditions:['O']},
         {fdi:'11.1',date:day,conditions:['C']}
       ]});
-      const additional = [...get('additional-teeth').children].map(button => button.textContent);
-      return additional.includes('51') && additional.includes('11.1') &&
-        dentitionByDate.get(day).size === 3;
-    })()`), 'Mixed dentition or supernumerary tooth disappeared');
+      const additional = [...get('additional-teeth').children];
+      const tooth = get('upper').querySelector('button[aria-label^="Зъб 11,"]');
+      tooth.click();
+      const selected = tooth.getAttribute('aria-pressed') === 'true' && !get('tooth-summary').hidden;
+      get('dentition-chart').click();
+      const inside = tooth.getAttribute('aria-pressed') === 'true';
+      get('chart-date').click();
+      const cleared = tooth.getAttribute('aria-pressed') === 'false' && get('tooth-summary').hidden;
+      additional[0].click();
+      const extraSelected = additional[0].getAttribute('aria-pressed') === 'true';
+      const [earlier, latest] = get('dentition-timeline').querySelectorAll('button');
+      const dates = earlier.dataset.date === day && latest.dataset.date === '2026-01-03' &&
+        latest.getAttribute('aria-pressed') === 'true';
+      earlier.dispatchEvent(new PointerEvent('pointerenter', {pointerType:'mouse'}));
+      const hover = !dateTooltip.hidden && dateTooltip.textContent === '02.01.2026';
+      earlier.dispatchEvent(new PointerEvent('pointerleave', {pointerType:'mouse'}));
+      const left = dateTooltip.hidden;
+      earlier.focus();
+      const focus = !dateTooltip.hidden && dateTooltip.textContent === '02.01.2026';
+      earlier.click();
+      const historical = earlier.getAttribute('aria-pressed') === 'true' &&
+        get('dentition-chart').classList.contains('is-historical') && get('tooth-summary').hidden;
+      return additional.map(button => button.textContent).includes('51') &&
+        additional.map(button => button.textContent).includes('11.1') && dentitionByDate.get(day).size === 3 &&
+        selected && inside && cleared && extraSelected && dates && hover && left && focus && historical;
+    })()`), 'Odontogram selection, additional teeth or status timeline failed');
     assert(await evaluate(`(async()=>{document.querySelector('#open-settings').click();document.querySelector('#clear-errors').click();await errorLogQueue;return document.querySelector('#error-log').value==='';})()`));
     await evaluate(`(() => {
       document.querySelector('#view-settings').close();
