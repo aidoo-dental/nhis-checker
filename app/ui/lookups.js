@@ -3,11 +3,38 @@ const lookups = {
   treatments: {type: 'D006', id: '', pending: false, empty: false}
 };
 let busy = false;
-const patientFields = {first: 'first-name', middle: 'middle-name', last: 'last-name',
+const patientFields = {first: 'first-name', last: 'last-name',
   identifierType: 'id-type', identifier: 'patient-id'};
 const readPatient = () => Object.fromEntries(Object.entries(patientFields).map(([name, id]) => [name, get(id).value.trim()]));
 let patientKey = JSON.stringify(readPatient());
 let patientVersion = 0;
+let loadedPatient = false;
+
+function setPatientCollapsed(collapsed) {
+  const patient = readPatient();
+  const toggle = get('toggle-patient');
+  get('patient-summary').textContent = `${patient.first} ${patient.last} · ${get('id-type').selectedOptions[0].textContent}: ${patient.identifier}`;
+  get('patient-summary').hidden = !collapsed;
+  get('patient-form').hidden = collapsed;
+  get('view-patient').classList.toggle('is-collapsed', collapsed);
+  toggle.hidden = !loadedPatient;
+  toggle.setAttribute('aria-expanded', String(!collapsed));
+  const label = collapsed ? 'Разгъни полетата за друг пациент' : 'Свий полетата за пациента';
+  toggle.setAttribute('aria-label', label);
+  toggle.title = label;
+  if (collapsed && get('patient-form').contains(document.activeElement)) toggle.focus();
+}
+
+function patientLoaded() {
+  loadedPatient = true;
+  setPatientCollapsed(true);
+}
+
+get('toggle-patient').addEventListener('click', () => {
+  const expand = get('patient-form').hidden;
+  setPatientCollapsed(!expand);
+  if (expand) get('first-name').focus();
+});
 
 function updateLookups() {
   for (const [view, lookup] of Object.entries(lookups)) {
@@ -43,6 +70,8 @@ function syncPatient() {
   const key = JSON.stringify(readPatient());
   if (patientKey === key) return;
   patientKey = key;
+  loadedPatient = false;
+  setPatientCollapsed(false);
   setNotice('patient', '');
   resetResults();
 }
@@ -73,6 +102,7 @@ async function fetchLookup(view) {
     if (reply.empty) {
       lookup.empty = true;
       setNotice(view, '');
+      patientLoaded();
       return;
     }
     const data = readDentalResponse(reply.xml, lookup.type);
@@ -86,6 +116,7 @@ async function fetchLookup(view) {
     }
     lookup.id = reply.id;
     setNotice(view, 'Данните са получени от НЗИС.', 'done');
+    patientLoaded();
   } catch (error) {
     if (version === patientVersion) setNotice(view, error.message, 'cancelled');
   } finally {

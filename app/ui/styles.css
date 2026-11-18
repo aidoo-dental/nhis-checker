@@ -14,10 +14,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline:2px soli
 .brand { white-space:nowrap; font-weight:680; letter-spacing:-.018em }
 .patient-strip { margin:10px 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:#fafafa }
 .patient-strip h2 { margin:0 0 9px; font-size:15px; font-weight:680 }
+.patient-heading-row { display:flex; align-items:center; gap:12px }
+.patient-summary { margin:0; flex:1; min-width:0; overflow-wrap:anywhere; font-weight:600 }
+.patient-toggle { margin-left:auto; width:32px; min-height:30px; padding:0; flex:none }
+.patient-toggle svg { display:block; flex:none }
+.patient-toggle[aria-expanded="true"] svg { transform:rotate(180deg) }
+.patient-strip.is-collapsed { padding:5px 12px; margin:7px 0 }
+.patient-strip.is-collapsed h2 { margin:0; font-size:12px; color:var(--muted) }
+.patient-heading-row:has(.patient-toggle:not([hidden])) { margin-bottom:8px }
+.patient-strip.is-collapsed .patient-heading-row { margin-bottom:0 }
 .patient-form { display:grid; grid-template-columns:minmax(0,1fr) 184px; gap:9px 20px }
-.patient-fields { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px 12px }
+.patient-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px 12px }
 .patient-fields label { grid-column:span 2; align-content:end; min-width:0 }
-.patient-fields .patient-number { grid-column:span 4 }
+.patient-fields .patient-number { grid-column:span 2 }
 .required-mark { color:#415e78 }
 .patient-fields :is(input,select) { min-width:0; height:36px }
 .patient-actions { display:grid; grid-template-rows:repeat(2,minmax(0,1fr)); align-items:end; gap:9px; padding-left:16px; border-left:1px solid var(--line) }
@@ -203,7 +212,7 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
   .patient-strip { padding:10px }
   .patient-form { grid-template-columns:minmax(0,1fr) }
   .patient-fields { column-gap:8px }
-  .patient-fields .patient-id-type,.patient-fields .patient-number { grid-column:span 3 }
+  .patient-fields .patient-id-type,.patient-fields .patient-number { grid-column:span 2 }
   .patient-actions { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; align-items:stretch; padding:0; border:0 }
   .patient-actions .control { padding-inline:6px; white-space:normal }
   .detail-fields > div { column-gap:10px }

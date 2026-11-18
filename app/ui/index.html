@@ -16,11 +16,14 @@
         <button type="button" class="control settings-icon" id="open-settings" aria-label="Настройки" title="Настройки" aria-haspopup="dialog"></button>
       </div>
       <section id="view-patient" class="patient-strip" aria-labelledby="patient-heading">
-        <h2 id="patient-heading">Пациент</h2>
+        <div class="patient-heading-row">
+          <h2 id="patient-heading">Пациент</h2>
+          <p class="patient-summary" id="patient-summary" hidden></p>
+          <button type="button" class="control patient-toggle" id="toggle-patient" aria-controls="patient-form" aria-expanded="true" aria-label="Разгъни полетата за пациента" title="Разгъни полетата за пациента" hidden><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6 L8 10 L12 6" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
         <form class="patient-form" id="patient-form">
           <div class="patient-fields">
             <label><span>Име <span class="required-mark" aria-hidden="true">*</span></span><input id="first-name" required maxlength="255" autocomplete="off"></label>
-            <label>Презиме<input id="middle-name" maxlength="255" autocomplete="off"></label>
             <label><span>Фамилия <span class="required-mark" aria-hidden="true">*</span></span><input id="last-name" required maxlength="255" autocomplete="off"></label>
             <label class="patient-id-type">Тип идентификатор
               <select id="id-type" required>

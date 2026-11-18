@@ -65,6 +65,31 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await delay(500);
     }
     assert(ready,'Native settings bridge did not initialize');
+    assert(await evaluate(`(async () => {
+      if (get('middle-name')) return false;
+      get('first-name').value = 'Тест';
+      get('last-name').value = 'Пациент';
+      get('patient-id').value = '0000000000';
+      syncPatient();
+      const expandedHeight = get('view-patient').getBoundingClientRect().height;
+      const originalDesktop = desktop;
+      desktop = async () => ({id:'test-patient', xml:'<message xmlns="https://www.his.bg"><header><messageType value="D006"/></header><contents><foundNumber value="0"/></contents></message>'});
+      try {
+        await fetchLookup('treatments');
+        if (!get('patient-form').hidden || !get('patient-summary').textContent.includes('Тест Пациент') ||
+            !get('patient-summary').textContent.includes('0000000000') ||
+            get('view-patient').getBoundingClientRect().height >= expandedHeight - 50 ||
+            get('toggle-patient').getAttribute('aria-expanded') !== 'false') return false;
+        get('toggle-patient').click();
+        if (get('patient-form').hidden || !lookups.treatments.id) return false;
+        get('first-name').value = 'Друг';
+        get('first-name').dispatchEvent(new Event('input', {bubbles:true}));
+        if (lookups.treatments.id || get('patient-form').hidden || !get('toggle-patient').hidden) return false;
+        for (const id of ['first-name', 'last-name', 'patient-id']) get(id).value = '';
+        syncPatient();
+        return true;
+      } finally { desktop = originalDesktop; }
+    })()`), 'Patient form must collapse after loading and expand for another patient');
     if (webview2) {
       assert(await evaluate("!!window.chrome?.webview && !window.qt?.webChannelTransport"));
       await evaluate("location.assign('https://outside.invalid/')");
