@@ -15,7 +15,7 @@ namespace {
 void expect(bool value, const char *message) {
     if (!value) throw std::runtime_error(message);
 }
-enum class Scenario { AvailableKey, FailedSlots, EmptyFirst, Removed, Login, BadLogin };
+enum class Scenario { AvailableKey, FailedSlots, EmptyFirst, Removed, Login, BadLogin, RefreshedCertificate };
 Scenario scenario;
 PKCS11_TOKEN token{};
 PKCS11_SLOT slot{};
@@ -100,6 +100,12 @@ PKCS11_KEY *PKCS11_find_key(PKCS11_CERT *candidate) {
 }
 EVP_PKEY *PKCS11_get_private_key(PKCS11_KEY *) {
     if ((scenario == Scenario::Login || scenario == Scenario::BadLogin) && !authenticated) return nullptr;
+    if (scenario == Scenario::RefreshedCertificate) {
+        // Some drivers replace cached certificates while resolving a key.
+        // Signing must keep working with the session's retained reference.
+        X509_free(cert.x509);
+        cert.x509 = nullptr;
+    }
     EVP_PKEY_up_ref(softwareKey);
     return softwareKey;
 }
@@ -139,7 +145,8 @@ int main(int argc, char **argv) {
         // Initialize OpenSSL/Windows crypto before redirecting driver lookup.
         qputenv("SystemRoot", root.path().toUtf8());
         qputenv("ProgramFiles", root.path().toUtf8());
-        for (auto next : {Scenario::AvailableKey, Scenario::FailedSlots, Scenario::EmptyFirst, Scenario::Login}) {
+        for (auto next : {Scenario::AvailableKey, Scenario::FailedSlots, Scenario::EmptyFirst,
+                         Scenario::Login, Scenario::RefreshedCertificate}) {
             reset(next);
             SigningSession session;
             session.unlock(nullptr, {});
@@ -148,6 +155,9 @@ int main(int argc, char **argv) {
             expect(loads.size() == expectedLoads, "Wrong number of driver probes/reloads");
             expect(loads.back() == loads[loads.size() - 2], "Did not reload the selected driver");
             expect(logins == (next == Scenario::Login ? 1 : 0), "Unexpected login or repeated PIN attempt");
+            if (next == Scenario::RefreshedCertificate)
+                expect(session.sign("<check xmlns=\"urn:nhis:test\"/>").contains("SignatureValue"),
+                    "Signing failed after the driver released its certificate reference");
             session.close();
             session.close();
             expect(!loaded && !slotsLive && contexts == 0, "Close leaked driver resources");

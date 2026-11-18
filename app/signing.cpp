@@ -100,7 +100,6 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
     bool driverFound = false;
     bool driverReady = false;
     bool tokenFound = false;
-    bool unreadableCertificate = false;
     const auto paths = driver.isEmpty() ? defaultDrivers() : QStringList{driver};
     for (const QString &path : paths) {
         if (!QFileInfo(path).isFile()) continue;
@@ -132,10 +131,6 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
                 const auto fingerprint = QCryptographicHash::hash(der, QCryptographicHash::Sha256).toHex().left(12);
                 const QString label = QStringLiteral("%1 · %2 · %3").arg(name, issuer, QString::fromLatin1(fingerprint));
                 if (labels.contains(label)) continue;
-                if (X509_up_ref(cert) != 1) {
-                    unreadableCertificate = true;
-                    continue;
-                }
                 labels << label;
                 candidates.push_back({path, der, name.isEmpty() ? label : name});
             }
@@ -152,8 +147,6 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
             fail(QStringLiteral("Драйверът за КЕП не може да се използва. Провери дали е за архитектурата на приложението."));
         if (!tokenFound)
             fail(QStringLiteral("КЕП токенът не е открит. Включи го и опитай отново."));
-        if (unreadableCertificate)
-            fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
         fail(QStringLiteral("На токена няма достъпен валиден RSA сертификат за подписване. Провери сертификата в приложението на доставчика."));
     }
     qsizetype selected = 0;
@@ -186,7 +179,10 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
     }
     if (!selectedCert)
         fail(QStringLiteral("Избраният сертификат вече не е достъпен. Провери КЕП токена и опитай отново."));
-    module.certificate = selectedCert->x509;
+    // Keep our own reference if the driver refreshes its certificate cache.
+    if (X509_up_ref(selectedCert->x509) != 1)
+        fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
+    module.certificate.reset(selectedCert->x509);
     module.name = candidate.name;
     // Try the existing authenticated session before asking
     // for a PIN. Do not repeat C_Login when the key is already available.
