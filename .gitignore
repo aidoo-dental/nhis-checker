@@ -4,3 +4,7 @@
 /.deps/
 /CMakeUserPresets.json
 *.user
+
+/.vs/
+/local.pri
+*.vcxproj.user

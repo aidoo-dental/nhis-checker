@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// PKCS#11 flow adapted from DinoDent, src/Network/PKCS11.cpp.
 #include "error.h"
 #include "signing.h"
 #include "xml_signature.h"
@@ -23,18 +22,22 @@ QStringList defaultDrivers() {
     const auto windows = qEnvironmentVariable("SystemRoot", QStringLiteral("C:/Windows"));
     const auto programs = qEnvironmentVariable("ProgramFiles", QStringLiteral("C:/Program Files"));
     return {windows + "/System32/eTPKCS11.dll",
-        programs + "/SafeNet/Authentication/SAC/x64/IDPrimePKCS1164.dll",
         programs + "/OpenSC Project/OpenSC/pkcs11/opensc-pkcs11.dll",
+        programs + "/SafeNet/Authentication/SAC/x64/IDPrimePKCS1164.dll",
         windows + "/System32/OcsPKCS11Wrapper.dll", windows + "/System32/bit4ipki.dll",
         windows + "/System32/idprimepkcs11.dll", windows + "/System32/cmP11.dll",
         windows + "/System32/cvP11.dll", windows + "/System32/siecap11.dll", windows + "/System32/cmP1164.dll"};
 #elif defined(Q_OS_MACOS)
-    return {"/Library/Frameworks/eToken.framework/Versions/A/libIDPrimePKCS11.dylib",
-        "/Library/OpenSC/lib/opensc-pkcs11.so", "/Library/AWP/lib/libOcsCryptoki.dylib",
+    return {"/Library/OpenSC/lib/opensc-pkcs11.so", "/Library/AWP/lib/libOcsCryptoki.dylib",
+        "/Library/Frameworks/eToken.framework/Versions/A/libIDPrimePKCS11.dylib",
         "/Library/Gemalto/libidprimepkcs11.dylib", "/Library/CV Cryptovision/libcvp11.dylib",
         "/Library/bit4id/pkcs11/libbit4ipki.dylib", "/Applications/Charismathics/libcmP11.dylib"};
 #else
-    return {"/usr/lib/x86_64-linux-gnu/opensc-pkcs11.so", "/usr/lib64/opensc-pkcs11.so"};
+    return {"/usr/lib/x86_64-linux-gnu/opensc-pkcs11.so", "/usr/lib64/opensc-pkcs11.so",
+        "/usr/lib/pkcs11/libeTPkcs11.so", "/usr/lib64/pkcs11/libeTPkcs11.so",
+        "/usr/lib/libIDPrimePKCS11.so", "/usr/lib64/libIDPrimePKCS11.so",
+        "/usr/local/lib64/libcvP11.so", "/usr/lib/libbit4ipki.so",
+        "/usr/lib64/libbit4ipki.so", "/usr/local/lib/libsiecap11.so"};
 #endif
 }
 } // namespace
@@ -48,11 +51,25 @@ struct SigningSession::State {
     X509 *certificate = nullptr;
     QString name;
     bool loaded = false;
-    ~State() {
+    void unload() {
         EVP_PKEY_free(key);
+        key = nullptr;
+        certificate = nullptr;
         if (loggedIn) PKCS11_logout(loggedIn);
+        loggedIn = nullptr;
         if (slotList) PKCS11_release_all_slots(context, slotList, count);
+        slotList = nullptr;
+        count = 0;
         if (loaded) PKCS11_CTX_unload(context);
+        loaded = false;
+    }
+    bool load(const QString &path) {
+        if (!context) return false;
+        loaded = PKCS11_CTX_load(context, QFile::encodeName(QDir::toNativeSeparators(path)).constData()) == 0;
+        return loaded;
+    }
+    ~State() {
+        unload();
         if (context) PKCS11_CTX_free(context);
     }
 };
@@ -69,8 +86,12 @@ QByteArray SigningSession::sign(const QByteArray &xml) const {
 
 void SigningSession::unlock(QWidget *parent, const QString &driver) {
     if (state) return;
-    struct Candidate { State *module; PKCS11_SLOT *slot; PKCS11_CERT *cert; QString name; };
-    std::vector<std::unique_ptr<State>> modules;
+    // Probe one module at a time,
+    // copy certificate identity, then reload only the selected module.
+    // Never retain driver-owned certificate/slot pointers across an unload.
+    struct Candidate { QString path; QByteArray der; QString name; };
+    auto session = std::make_unique<State>();
+    auto &module = *session;
     std::vector<Candidate> candidates;
     QStringList labels;
     bool driverFound = false;
@@ -80,14 +101,14 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
     for (const QString &path : paths) {
         if (!QFileInfo(path).isFile()) continue;
         driverFound = true;
-        auto module = std::make_unique<State>();
-        if (!module->context || PKCS11_CTX_load(module->context, QFile::encodeName(QDir::toNativeSeparators(path)).constData()) != 0)
+        if (!module.load(path)) continue;
+        if (PKCS11_enumerate_slots(module.context, &module.slotList, &module.count) != 0) {
+            module.unload();
             continue;
-        module->loaded = true;
-        if (PKCS11_enumerate_slots(module->context, &module->slotList, &module->count) != 0) continue;
+        }
         driverReady = true;
-        for (auto *slot = PKCS11_find_token(module->context, module->slotList, module->count); slot;
-             slot = PKCS11_find_next_token(module->context, module->slotList, module->count, slot)) {
+        for (auto *slot = PKCS11_find_token(module.context, module.slotList, module.count); slot;
+             slot = PKCS11_find_next_token(module.context, module.slotList, module.count, slot)) {
             if (!slot->token) continue;
             tokenFound = true;
             PKCS11_CERT *certs = nullptr;
@@ -103,14 +124,18 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
                 if (!EVP_PKEY_is_a(X509_get0_pubkey(cert), "RSA")) continue;
                 const auto name = certificateField(X509_get_subject_name(cert), NID_commonName);
                 const auto issuer = certificateField(X509_get_issuer_name(cert), NID_commonName);
-                const auto fingerprint = QCryptographicHash::hash(certificateDer(cert), QCryptographicHash::Sha256).toHex().left(12);
+                const auto der = certificateDer(cert);
+                const auto fingerprint = QCryptographicHash::hash(der, QCryptographicHash::Sha256).toHex().left(12);
                 const QString label = QStringLiteral("%1 · %2 · %3").arg(name, issuer, QString::fromLatin1(fingerprint));
                 if (labels.contains(label)) continue;
                 labels << label;
-                candidates.push_back({module.get(), slot, &certs[i], name.isEmpty() ? label : name});
+                candidates.push_back({path, der, name.isEmpty() ? label : name});
             }
         }
-        if (!candidates.empty() && candidates.back().module == module.get()) modules.push_back(std::move(module));
+        module.unload();
+        // Do not probe later drivers (which may expose the
+        // same token through another vendor DLL) once a usable one is found.
+        if (!candidates.empty()) break;
     }
     if (candidates.empty()) {
         if (!driverFound)
@@ -130,11 +155,41 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
         selected = labels.indexOf(label);
     }
     const auto candidate = candidates.at(size_t(selected));
-    auto &module = *candidate.module;
-    if (candidate.slot->token->userPinLocked)
+    if (!module.load(candidate.path) ||
+        PKCS11_enumerate_slots(module.context, &module.slotList, &module.count) != 0)
+        fail(QStringLiteral("Драйверът за избрания КЕП не може да се зареди отново."));
+    PKCS11_SLOT *selectedSlot = nullptr;
+    PKCS11_CERT *selectedCert = nullptr;
+    for (auto *slot = PKCS11_find_token(module.context, module.slotList, module.count); slot && !selectedCert;
+         slot = PKCS11_find_next_token(module.context, module.slotList, module.count, slot)) {
+        if (!slot->token) continue;
+        PKCS11_CERT *certs = nullptr;
+        unsigned count = 0;
+        if (PKCS11_enumerate_certs(slot->token, &certs, &count) != 0) continue;
+        for (unsigned i = 0; i < count; ++i) {
+            if (certs[i].x509 && certificateDer(certs[i].x509) == candidate.der) {
+                selectedSlot = slot;
+                selectedCert = &certs[i];
+                break;
+            }
+        }
+    }
+    if (!selectedCert)
+        fail(QStringLiteral("Избраният сертификат вече не е достъпен. Провери КЕП токена и опитай отново."));
+    module.certificate = selectedCert->x509;
+    module.name = candidate.name;
+    // Try the existing authenticated session before asking
+    // for a PIN. Do not repeat C_Login when the key is already available.
+    if (auto *privateKey = PKCS11_find_key(selectedCert))
+        module.key = PKCS11_get_private_key(privateKey);
+    if (module.key) {
+        state = std::move(session);
+        return;
+    }
+    if (selectedSlot->token->userPinLocked)
         fail(QStringLiteral("ПИН-ът на КЕП е блокиран. Използвай приложението на доставчика за отключване."));
-    if (candidate.slot->token->secureLogin) {
-        if (PKCS11_login(candidate.slot, 0, nullptr) != 0)
+    if (selectedSlot->token->secureLogin) {
+        if (PKCS11_login(selectedSlot, 0, nullptr) != 0)
             fail(QStringLiteral("Удостоверяването на токена е неуспешно."));
     } else {
         QString input = QInputDialog::getText(parent, QStringLiteral("Отключване на КЕП"),
@@ -143,16 +198,13 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
         if (input.isEmpty()) fail(QStringLiteral("Въведи ПИН на КЕП токена."));
         QByteArray pin = input.toUtf8();
         OPENSSL_cleanse(input.data(), size_t(input.size()) * sizeof(QChar));
-        const int result = PKCS11_login(candidate.slot, 0, pin.constData());
+        const int result = PKCS11_login(selectedSlot, 0, pin.constData());
         OPENSSL_cleanse(pin.data(), size_t(pin.size()));
         if (result != 0) fail(QStringLiteral("Токенът отказа вход. Провери ПИН-а и оставащите опити."));
     }
-    module.loggedIn = candidate.slot;
-    auto *privateKey = PKCS11_find_key(candidate.cert);
+    module.loggedIn = selectedSlot;
+    auto *privateKey = PKCS11_find_key(selectedCert);
     if (!privateKey || !(module.key = PKCS11_get_private_key(privateKey)))
         fail(QStringLiteral("Избраният сертификат няма достъпен частен ключ."));
-    module.certificate = candidate.cert->x509;
-    module.name = candidate.name;
-    for (auto &entry : modules)
-        if (entry.get() == &module) { state = std::move(entry); break; }
+    state = std::move(session);
 }

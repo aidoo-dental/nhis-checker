@@ -1,0 +1,35 @@
+<RCC>
+  <qresource prefix="/app">
+    <file>ui/bridge.js</file>
+    <file>ui/index.html</file>
+    <file>ui/layout.js</file>
+    <file>ui/lookups.js</file>
+    <file>ui/nomenclatures.json</file>
+    <file>ui/notifications.js</file>
+    <file>ui/odontogram.js</file>
+    <file>ui/settings.js</file>
+    <file>ui/status/cancelled.svg</file>
+    <file>ui/status/done.svg</file>
+    <file>ui/status/pending.svg</file>
+    <file>ui/status/unknown.svg</file>
+    <file>ui/styles.css</file>
+    <file>ui/teeth/lower1.svg</file>
+    <file>ui/teeth/lower2.svg</file>
+    <file>ui/teeth/lower3.svg</file>
+    <file>ui/teeth/lower4.svg</file>
+    <file>ui/teeth/lower5.svg</file>
+    <file>ui/teeth/lower6.svg</file>
+    <file>ui/teeth/lower7.svg</file>
+    <file>ui/teeth/lower8.svg</file>
+    <file>ui/teeth/upper1.svg</file>
+    <file>ui/teeth/upper2.svg</file>
+    <file>ui/teeth/upper3.svg</file>
+    <file>ui/teeth/upper4.svg</file>
+    <file>ui/teeth/upper5.svg</file>
+    <file>ui/teeth/upper6.svg</file>
+    <file>ui/teeth/upper7.svg</file>
+    <file>ui/teeth/upper8.svg</file>
+    <file>ui/treatments.js</file>
+    <file>ui/xml-response.js</file>
+  </qresource>
+</RCC>

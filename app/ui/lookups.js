@@ -68,8 +68,8 @@ async function fetchLookup(view) {
     const data = readDentalResponse(reply.xml, lookup.type);
     if (view === 'status') displayDentition(data);
     else {
-      records = data.treatments;
-      foundTreatmentCount = data.found;
+      records = data.treatments.filter(record => record.statusCode !== '3');
+      foundTreatmentCount = records.length;
       get('record-filter').value = '';
       populateTreatmentFilters();
       renderRecords();

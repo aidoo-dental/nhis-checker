@@ -54,3 +54,52 @@ windeployqt --release --compiler-runtime "dist/windows-x64/NHIS Checker.exe"
 
 Добави в директорията нужните DLL от OpenSSL, libxml2 и libp11 заедно с техните зависимости. За тестовете DLL файловете трябва да са достъпни през `PATH`. [Пакетиране с Qt](https://doc.qt.io/qt-6.8/windows-deployment.html)
 
+
+## Qt Creator / Visual Studio (Windows local development)
+
+Open `nhis-checker.pro` in Qt Creator with the **Qt 6.8.3 MSVC 2022 64-bit**
+kit, or open `nhis-checker.sln` in Visual Studio 2022 and select **x64**,
+Debug or Release. Visual Studio needs the Desktop development with C++
+workload; no Qt VS extension is required. The solution invokes the same
+qmake project using `scripts/build-visual-studio.cmd`.
+
+The defaults use these installed sibling directories:
+
+| Dependency | Location relative to this repository |
+| --- | --- |
+| Qt 6.8.3 | `../Qt/6.8.3/msvc2022_64` |
+| OpenSSL 3 | `../Qt/Tools/OpenSSLv3/Win_x64` |
+| libxml2 headers / import library | `../ThirdParty/include`, `../ThirdParty/dependencies/lib/libxml2.lib` |
+| libxml2 runtime DLL | `../unibackup/dependencies/bin/libxml2.dll` |
+| libp11 headers / library / DLL | `../libp11-libp11-0.4.18/src` |
+
+Qt WebEngine, WebChannel and Positioning must be installed for the selected
+kit. These modules are now installed on the configured workstation.
+
+Optional dependency overrides go in the ignored `local.pri`:
+
+```qmake
+OPENSSL_ROOT = C:/deps/openssl3
+LIBXML2_ROOT = C:/Dev/ThirdParty
+LIBXML2_DLL = C:/deps/bin/libxml2.dll
+LIBP11_ROOT = C:/deps/libp11/src
+```
+
+Use `QtRoot` as an MSBuild property to override the solution’s Qt location,
+or `QT_ROOT` as an environment variable for the command-line build script.
+Select the corresponding kit separately in Qt Creator. All dependencies
+must be x64; libp11 must use OpenSSL 3.
+
+After linking, `scripts/deploy-development.ps1` copies the non-Qt DLLs and
+runs `windeployqt`, including WebEngine resources, so the application can
+run directly from its output directory. The Visual Studio output is
+`build-vs/Debug/NHIS Checker.exe` or `build-vs/Release/NHIS Checker.exe`.
+Qt Creator outputs to `debug` or `release` inside its shadow build directory.
+Do not commit generated build outputs. Use the existing packaging workflow
+above for redistributable installers.
+
+`app/desktop.qrc` preserves the CMake resource paths (`:/app/ui/...`). Update
+both this manifest and CMake’s resource list when adding UI assets. The IDE
+projects build the app; the CMake configuration also supplies protocol and
+resource tests. The existing `tests/windows-smoke.cjs` can test either deployed
+executable using Node.js with built-in WebSocket support.
