@@ -189,9 +189,15 @@ function renderRecords() {
   }).filter(({ procedures }) => procedures.length > 0);
   const rows = get('records');
   rows.replaceChildren();
-  get('records-count').textContent = 'Намерени лечения (' + foundTreatmentCount + ')';
-  get('records-filtered').textContent = matching.length < foundTreatmentCount
-    ? 'Показани ' + matching.length + ' от ' + foundTreatmentCount : '';
+  get('records-count').textContent = 'Получени лечения (' + records.length + ')';
+  get('records-limit').textContent = foundTreatmentCount === null
+    ? 'НЗИС не посочи валиден общ брой лечения.'
+    : records.length < foundTreatmentCount
+      ? 'НЗИС върна ' + records.length + ' от ' + foundTreatmentCount + ' лечения. Справката е непълна.'
+      : records.length > foundTreatmentCount
+        ? 'НЗИС посочи общ брой ' + foundTreatmentCount + ', а върна ' + records.length + ' записа.' : '';
+  get('records-filtered').textContent = matching.length < records.length
+    ? 'Филтрирани: ' + matching.length + ' от ' + records.length + ' получени лечения.' : '';
   get('no-records').hidden = matching.length !== 0;
   const entries = matching.flatMap(({record, procedures}, recordIndex) =>
     procedures.map((procedure, index) => ({record, procedure, recordIndex, index})));

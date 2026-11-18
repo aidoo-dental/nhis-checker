@@ -9,6 +9,9 @@ window.nzDesktopReply = (id, encoded) => {
   resolve(encoded);
 };
 
+const webview2 = window.chrome?.webview;
+webview2?.addEventListener('message', ({data}) => window.nzDesktopReply(data?.id, data?.encoded));
+
 const channel = typeof QWebChannel === 'function' && window.qt?.webChannelTransport
   ? new Promise(resolve => new QWebChannel(window.qt.webChannelTransport, result => resolve(result.objects.desktop)))
   : null;
@@ -21,6 +24,16 @@ async function desktop(action, data = {}) {
     encoded = await new Promise(resolve => {
       pendingMessages.set(id, resolve);
       window.webkit.messageHandlers.nzis.postMessage(message);
+    });
+  } else if (webview2) {
+    encoded = await new Promise((resolve, reject) => {
+      pendingMessages.set(id, resolve);
+      try {
+        webview2.postMessage({id, action, data});
+      } catch (error) {
+        pendingMessages.delete(id);
+        reject(error);
+      }
     });
   } else if (channel) {
     const bridge = await channel;

@@ -41,7 +41,7 @@ get('lookup-tabs').addEventListener('keydown', (event) => {
 });
 window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
 get('patient-form').addEventListener('submit', (event) => event.preventDefault());
-get('close-settings').addEventListener('click', () => get('view-settings').close());
+get('close-settings').addEventListener('click', () => closeSettings());
 
 function formatDate(date) { return date.split('-').reverse().join('.'); }
 function visitStamp(value, treatmentStart) {

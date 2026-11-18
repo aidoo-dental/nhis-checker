@@ -29,7 +29,7 @@ done
 
 ## Компилиране за Windows x64
 
-Workflow-ът `.github/workflows/windows.yml` компилира с MSVC 2022, Qt 6.8.3, OpenSSL, libxml2 и libp11. Изпълнява протоколните тестове и проверява всички вградени ресурси, пакетира чрез Inno Setup 6, инсталира EXE файла и проверява реалния интерфейс, връзката с приложението, известията и журнала. Накрая проверява деинсталирането. Готовият инсталатор е в артефакта `NHIS-Checker-Windows-x64` на успешния run.
+Workflow-ът `.github/workflows/windows.yml` компилира с MSVC 2022, Qt 6.8.3, OpenSSL 3.5 LTS, libxml2 и libp11. Изпълнява протоколните тестове и проверява всички вградени ресурси, пакетира чрез Inno Setup 6, инсталира EXE файла и проверява реалния интерфейс, връзката с приложението, известията и журнала. Накрая проверява деинсталирането. Успешният push build на `main` качва пакет за подписване с тридневен срок. Подписаните инсталатори се публикуват в Releases.
 
 Пакетиране след локално компилиране (PowerShell 7 в MSVC x64 среда):
 
@@ -54,7 +54,6 @@ windeployqt --release --compiler-runtime "dist/windows-x64/NHIS Checker.exe"
 
 Добави в директорията нужните DLL от OpenSSL, libxml2 и libp11 заедно с техните зависимости. За тестовете DLL файловете трябва да са достъпни през `PATH`. [Пакетиране с Qt](https://doc.qt.io/qt-6.8/windows-deployment.html)
 
-
 ## Qt Creator / Visual Studio (Windows local development)
 
 Open `nhis-checker.pro` in Qt Creator with the **Qt 6.8.3 MSVC 2022 64-bit**
@@ -65,13 +64,13 @@ qmake project using `scripts/build-visual-studio.cmd`.
 
 The defaults use these installed sibling directories:
 
-| Dependency | Location relative to this repository |
-| --- | --- |
-| Qt 6.8.3 | `../Qt/6.8.3/msvc2022_64` |
-| OpenSSL 3 | `../Qt/Tools/OpenSSLv3/Win_x64` |
+| Dependency                       | Location relative to this repository                                  |
+| -------------------------------- | --------------------------------------------------------------------- |
+| Qt 6.8.3                         | `../Qt/6.8.3/msvc2022_64`                                             |
+| OpenSSL 3                        | `../Qt/Tools/OpenSSLv3/Win_x64`                                       |
 | libxml2 headers / import library | `../ThirdParty/include`, `../ThirdParty/dependencies/lib/libxml2.lib` |
-| libxml2 runtime DLL | `../unibackup/dependencies/bin/libxml2.dll` |
-| libp11 headers / library / DLL | `../libp11-libp11-0.4.18/src` |
+| libxml2 runtime DLL              | `../unibackup/dependencies/bin/libxml2.dll`                           |
+| libp11 headers / library / DLL   | `../libp11-libp11-0.4.18/src`                                         |
 
 Qt WebEngine, WebChannel and Positioning must be installed for the selected
 kit. These modules are now installed on the configured workstation.

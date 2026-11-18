@@ -1,6 +1,6 @@
 const lookups = {
-  status: {type: 'D010', id: '', pending: false},
-  treatments: {type: 'D006', id: '', pending: false}
+  status: {type: 'D010', id: '', pending: false, empty: false},
+  treatments: {type: 'D006', id: '', pending: false, empty: false}
 };
 let busy = false;
 const patientFields = {first: 'first-name', middle: 'middle-name', last: 'last-name',
@@ -16,6 +16,8 @@ function updateLookups() {
     section.querySelector('[data-xml]').disabled = busy || !lookup.id;
     section.querySelector('[data-result]').hidden = !lookup.id;
     section.querySelector('[data-empty]').hidden = lookup.pending || Boolean(lookup.id);
+    if (view === 'treatments') section.querySelector('[data-empty]').textContent = lookup.empty
+      ? 'Няма намерени лечения.' : 'Изтегли леченията, за да видиш списъка.';
   }
 }
 function resetResults() {
@@ -23,6 +25,7 @@ function resetResults() {
   for (const [view, lookup] of Object.entries(lookups)) {
     if (lookup.id) desktop('discard', {view, id: lookup.id}).catch(() => {});
     lookup.id = '';
+    lookup.empty = false;
     setNotice(view, '');
   }
   records = [];
@@ -32,6 +35,7 @@ function resetResults() {
   dentitionByDate.clear();
   hideToothTooltip();
   for (const id of ['upper', 'lower', 'dentition-timeline']) get(id).replaceChildren();
+  get('additional-teeth').replaceChildren();
   get('tooth-summary').hidden = true;
   updateLookups();
 }
@@ -56,13 +60,19 @@ async function fetchLookup(view) {
   const version = patientVersion;
   const lookup = lookups[view];
   lookup.id = '';
+  lookup.empty = false;
   lookup.pending = busy = true;
   setNotice(view, 'Проверка на пациентските данни и извличане от НЗИС…', 'loading');
   updateLookups();
   try {
     const reply = await desktop('lookup', {view, ...readPatient()});
     if (version !== patientVersion) {
-      await desktop('discard', {view, id: reply.id});
+      if (reply.id) await desktop('discard', {view, id: reply.id});
+      return;
+    }
+    if (reply.empty) {
+      lookup.empty = true;
+      setNotice(view, '');
       return;
     }
     const data = readDentalResponse(reply.xml, lookup.type);

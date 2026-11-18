@@ -6,6 +6,8 @@
 #include <QTimeZone>
 #include <QUuid>
 #include <QXmlStreamWriter>
+#include <libxml/xmlreader.h>
+#include <memory>
 
 namespace {
 const QString ns = QStringLiteral("https://www.his.bg");
@@ -79,6 +81,21 @@ QDomDocument tryParseNhIs(const QByteArray &xml) {
     const auto version = version11.match(prolog);
     QByteArray readable = xml;
     if (version.hasMatch()) readable.replace(bom + version.capturedStart(2), 3, "1.0");
+    // Check structure before Qt constructs any DOM nodes. A byte limit alone
+    // does not prevent unbounded destructor recursion (CVE-2026-19248).
+    if (readable.size() > 16 * 1024 * 1024) return {};
+    const std::unique_ptr<xmlTextReader, decltype(&xmlFreeTextReader)> reader(
+        xmlReaderForMemory(readable.constData(), int(readable.size()), nullptr, "UTF-8",
+                           XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING),
+        xmlFreeTextReader);
+    if (!reader) return {};
+    int state;
+    while ((state = xmlTextReaderRead(reader.get())) == 1) {
+        if (xmlTextReaderDepth(reader.get()) >= 64 ||
+            xmlTextReaderNodeType(reader.get()) == XML_READER_TYPE_DOCUMENT_TYPE ||
+            xmlTextReaderAttributeCount(reader.get()) > 64) return {};
+    }
+    if (state != 0) return {};
     QDomDocument document;
     if (!document.setContent(readable, QDomDocument::ParseOption::UseNamespaceProcessing) ||
         document.documentElement().localName() != "message" || document.documentElement().namespaceURI() != ns)
@@ -106,26 +123,16 @@ QString value(const QDomElement &parent, const QString &name) {
 QString nhisResponseError(const QDomDocument &document) {
     const auto root = document.documentElement();
     const auto type = value(child(root, "header"), "messageType");
-    if (type.size() != 4 || !type.endsWith("099")) return {};
+    if (!QRegularExpression("\\A[A-Z]099\\z").match(type).hasMatch()) return {};
 
     QStringList lines{QStringLiteral("НЗИС върна грешка (%1).").arg(type)};
     const auto contents = child(root, "contents");
     for (auto error = contents.firstChildElement(); !error.isNull(); error = error.nextSiblingElement()) {
         if (error.namespaceURI() != ns || error.localName() != "error") continue;
 
-        QStringList details;
-        const auto code = value(error, "type").simplified().left(20);
-        if (!code.isEmpty()) details << QStringLiteral("Код %1").arg(code);
-        for (auto field = error.firstChildElement(); !field.isNull(); field = field.nextSiblingElement()) {
-            if (field.namespaceURI() != ns) continue;
-            const auto name = field.localName();
-            if (name != "reason" && name != "description") continue;
-            const auto text = field.attribute("value").simplified().left(2000);
-            if (!text.isEmpty() && !details.contains(text)) details << text;
-        }
-        const auto attribute = value(error, "faultyAttribute").simplified().left(255);
-        if (!attribute.isEmpty()) details << QStringLiteral("Поле %1").arg(attribute);
-        if (!details.isEmpty()) lines << details.join(QStringLiteral(" · "));
+        const auto code = value(error, "type");
+        if (QRegularExpression("\\A[A-Z][0-9]{3}\\z").match(code).hasMatch() && lines.size() < 9)
+            lines << QStringLiteral("Код %1").arg(code);
     }
     return lines.join('\n');
 }
@@ -138,7 +145,7 @@ void validateDentalResponse(const QDomDocument &document, const DentalMessage &r
     const auto type = value(header, "messageType");
     if (type.isEmpty()) fail(QStringLiteral("В XML отговора на НЗИС липсва типът на съобщението."));
     if (type != request.replyType)
-        fail(QStringLiteral("НЗИС върна неочакван тип отговор (%1). Очаква се %2.").arg(type.left(20), request.replyType));
+        fail(QStringLiteral("НЗИС върна неочакван тип отговор. Очаква се %1.").arg(request.replyType));
     if (value(header, "messageId") != request.id)
         fail(QStringLiteral("Отговорът на НЗИС е за друга заявка. Повтори справката."));
 
@@ -146,8 +153,16 @@ void validateDentalResponse(const QDomDocument &document, const DentalMessage &r
     if (type == "D010") {
         if (child(contents, "dentalStatus").isNull())
             fail(QStringLiteral("В отговора на НЗИС липсва денталният статус."));
-    } else if (!QRegularExpression("^[0-9]+$").match(value(contents, "foundNumber")).hasMatch()) {
-        fail(QStringLiteral("В отговора на НЗИС липсва валиден брой на намерените лечения."));
+    } else {
+        // The reported total is informational when records are present. Patient
+        // identity is verified separately for every returned record.
+        if (!child(contents, "results").isNull()) return;
+        bool ok = false;
+        const auto total = value(contents, "foundNumber").toUInt(&ok);
+        if (!ok)
+            fail(QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."));
+        if (total != 0)
+            fail(QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."));
     }
 }
 

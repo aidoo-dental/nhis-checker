@@ -4,7 +4,8 @@ let errorLogQueue = Promise.resolve();
 function renderErrorLog(entries) {
   get('error-log').value = entries.map(entry => {
     const time = new Date(entry.time).toLocaleString('bg-BG', {hour12: false});
-    const environment = entry.environment === 'production' ? 'Продукционна среда' : 'Тестова среда';
+    const environment = entry.environment === 'local' ? 'Локален пробен подпис'
+      : entry.environment === 'production' ? 'Продукционна среда' : 'Тестова среда';
     return time + ' · ' + entry.context + '\n' + environment + ' · NHIS Checker ' +
       entry.version + '\n' + entry.message;
   }).join('\n\n');
@@ -24,14 +25,13 @@ function updateErrorLog(action, data = {}) {
   return errorLogQueue;
 }
 
-function setNotice(view, message, state = 'info') {
+function setNotice(view, message, state = 'info', operation = '') {
   const notice = get('view-' + view).querySelector('[data-notice]');
   notice.textContent = state === 'loading' ? message : '';
   activeToasts.get(view)?.dismiss();
   if (!message || state === 'loading') return;
   if (state === 'cancelled') {
-    const context = {...labels, patient: 'Пациент', settings: 'Настройки'}[view] || view;
-    updateErrorLog('logError', {context, message});
+    updateErrorLog('logError', {view, message, operation});
   }
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -44,9 +44,7 @@ function setNotice(view, message, state = 'info') {
   const text = document.createElement('div');
   text.className = 'toast-message';
   text.setAttribute('role', state === 'cancelled' ? 'alert' : 'status');
-  text.textContent = state === 'cancelled'
-    ? message.split('\n')[0] + '\nПодробностите са в журнала на грешките.'
-    : message;
+  text.textContent = message;
   toast.append(text);
   if (state === 'cancelled') {
     const details = document.createElement('button');

@@ -64,8 +64,10 @@ function readDentalResponse(text, type) {
     throw new Error('Невалиден XML отговор от НЗИС.');
 
   if (type === 'D006') {
+    const total = xmlValue(contents, 'foundNumber').trim();
+    const found = Number(total);
     return {
-      found: Number(xmlValue(contents, 'foundNumber')),
+      found: /^\+?\d+$/.test(total) && Number.isSafeInteger(found) && found <= 4294967295 ? found : null,
       treatments: elements(contents, 'results').map(readTreatment)
     };
   }

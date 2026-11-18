@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
-project(NZISSpravki VERSION 1.0.12 LANGUAGES CXX)
+project(NZISSpravki VERSION 1.0.15 LANGUAGES CXX)
 set(APP_NAME "NHIS Checker")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+option(NHIS_WEBVIEW2_PREVIEW "Build the Windows WebView2 preview" OFF)
 
 if(APPLE AND NOT TARGET WrapOpenGL::WrapOpenGL)
     # Qt 6.8's OpenGL wrapper links AGL, which the macOS 26 SDK removed.
@@ -51,6 +52,19 @@ if(APPLE)
         MACOSX_BUNDLE_ICON_FILE NZIS.icns
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+elseif(WIN32 AND NHIS_WEBVIEW2_PREVIEW)
+    set(WEBVIEW2_SDK_DIR "" CACHE PATH "Extracted Microsoft.Web.WebView2 NuGet package")
+    set(WEBVIEW2_NATIVE_DIR "${WEBVIEW2_SDK_DIR}/build/native")
+    if(NOT EXISTS "${WEBVIEW2_NATIVE_DIR}/include/WebView2.h" OR
+       NOT EXISTS "${WEBVIEW2_NATIVE_DIR}/x64/WebView2Loader.dll.lib")
+        message(FATAL_ERROR "Set WEBVIEW2_SDK_DIR to the extracted Microsoft.Web.WebView2 SDK for the Windows x64 preview.")
+    endif()
+    target_compile_definitions(NZISSpravki PRIVATE NHIS_WEBVIEW2_PREVIEW)
+    target_sources(NZISSpravki PRIVATE app/browser_webview2.cpp)
+    target_include_directories(NZISSpravki PRIVATE "${WEBVIEW2_NATIVE_DIR}/include")
+    target_link_libraries(NZISSpravki PRIVATE "${WEBVIEW2_NATIVE_DIR}/x64/WebView2Loader.dll.lib" ole32 shlwapi)
+    install(FILES "${WEBVIEW2_NATIVE_DIR}/x64/WebView2Loader.dll" DESTINATION .)
+    install(FILES "${WEBVIEW2_SDK_DIR}/LICENSE.txt" DESTINATION licenses RENAME webview2-sdk.txt)
 else()
     find_package(Qt6 6.6 REQUIRED COMPONENTS WebEngineWidgets WebChannel)
     target_sources(NZISSpravki PRIVATE app/browser_qt.cpp)

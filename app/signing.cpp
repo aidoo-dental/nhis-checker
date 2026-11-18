@@ -10,6 +10,7 @@
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QStringList>
+#include <memory>
 #include <vector>
 #include <libp11.h>
 #include <openssl/evp.h>
@@ -17,6 +18,8 @@
 #include <openssl/x509v3.h>
 
 namespace {
+using Certificate = std::unique_ptr<X509, decltype(&X509_free)>;
+
 QStringList defaultDrivers() {
 #ifdef Q_OS_WIN
     const auto windows = qEnvironmentVariable("SystemRoot", QStringLiteral("C:/Windows"));
@@ -48,7 +51,7 @@ struct SigningSession::State {
     unsigned count = 0;
     PKCS11_SLOT *loggedIn = nullptr;
     EVP_PKEY *key = nullptr;
-    X509 *certificate = nullptr;
+    Certificate certificate{nullptr, X509_free};
     QString name;
     bool loaded = false;
     void unload() {
@@ -81,7 +84,7 @@ bool SigningSession::isOpen() const { return bool(state); }
 QString SigningSession::certificateName() const { return state ? state->name : QString(); }
 QByteArray SigningSession::sign(const QByteArray &xml) const {
     if (!state) fail(QStringLiteral("Избери и отключи сертификат за КЕП."));
-    return signEnveloped(xml, state->key, state->certificate);
+    return signEnveloped(xml, state->key, state->certificate.get());
 }
 
 void SigningSession::unlock(QWidget *parent, const QString &driver) {
@@ -97,6 +100,7 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
     bool driverFound = false;
     bool driverReady = false;
     bool tokenFound = false;
+    bool unreadableCertificate = false;
     const auto paths = driver.isEmpty() ? defaultDrivers() : QStringList{driver};
     for (const QString &path : paths) {
         if (!QFileInfo(path).isFile()) continue;
@@ -128,6 +132,10 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
                 const auto fingerprint = QCryptographicHash::hash(der, QCryptographicHash::Sha256).toHex().left(12);
                 const QString label = QStringLiteral("%1 · %2 · %3").arg(name, issuer, QString::fromLatin1(fingerprint));
                 if (labels.contains(label)) continue;
+                if (X509_up_ref(cert) != 1) {
+                    unreadableCertificate = true;
+                    continue;
+                }
                 labels << label;
                 candidates.push_back({path, der, name.isEmpty() ? label : name});
             }
@@ -144,6 +152,8 @@ void SigningSession::unlock(QWidget *parent, const QString &driver) {
             fail(QStringLiteral("Драйверът за КЕП не може да се използва. Провери дали е за архитектурата на приложението."));
         if (!tokenFound)
             fail(QStringLiteral("КЕП токенът не е открит. Включи го и опитай отново."));
+        if (unreadableCertificate)
+            fail(QStringLiteral("Сертификатът не може да бъде прочетен."));
         fail(QStringLiteral("На токена няма достъпен валиден RSA сертификат за подписване. Провери сертификата в приложението на доставчика."));
     }
     qsizetype selected = 0;
