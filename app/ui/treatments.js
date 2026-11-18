@@ -152,11 +152,14 @@ function treatmentSortDate(record, procedure) {
   return day + 'T' + (time?.slice(0, 8) || '00:00:00');
 }
 
+function displayedProcedures(record) {
+  return record.statusCode === '3' || !record.procedures?.length ? [{}] : record.procedures;
+}
+
 function populateTreatmentFilters() {
-  const procedures = records.flatMap((record) => record.procedures ?? []);
-  const dates = new Set(records.flatMap((record) => record.procedures?.length
-    ? record.procedures.map((procedure) => treatmentDay(record, procedure))
-    : [treatmentDay(record)]).filter(Boolean));
+  const procedures = records.flatMap(displayedProcedures);
+  const dates = new Set(records.flatMap((record) => displayedProcedures(record)
+    .map((procedure) => treatmentDay(record, procedure))).filter(Boolean));
   const teeth = new Set(procedures.flatMap((procedure) =>
     (procedure.teeth ?? []).map((tooth) => tooth.fdi).filter(Boolean).map(String)));
   for (const [id, values, label] of [
@@ -179,7 +182,7 @@ function renderRecords() {
   const date = get('record-date').value;
   const tooth = get('record-tooth').value;
   const matching = records.filter((record) => !filter || treatmentState(record) === filter).map((record) => {
-    const procedures = record.procedures?.length ? record.procedures : [{}];
+    const procedures = displayedProcedures(record);
     return {
       record,
       procedures: procedures.filter((procedure) =>
@@ -219,7 +222,9 @@ function renderRecords() {
     toggle.setAttribute('aria-controls', detailsId);
     toggle.setAttribute('aria-expanded', 'false');
     toggle.append(activityName(procedure, 'Детайли за лечението'));
-    treatmentCell(row, 'Дейност', 'activity-cell').append(toggle);
+    const activityCell = treatmentCell(row, 'Дейност', 'activity-cell');
+    if (record.statusCode === '3') activityCell.textContent = 'Анулиран лист';
+    else activityCell.append(toggle);
     const doctor = treatmentCell(row, 'ЛПК на лекаря', 'code record-id');
     const status = treatmentCell(row, 'Лечение', 'record-state');
     const nrnCell = treatmentCell(row, 'НРН', 'code record-id');
@@ -231,6 +236,8 @@ function renderRecords() {
     status.title = state === 'Приключено' && record.statusCode === '1'
       ? 'Приключено според върнатата крайна дата.' : '';
     setFieldValue(nrnCell, record.nrn);
+
+    if (record.statusCode === '3') continue;
 
     const details = rows.insertRow();
     details.id = detailsId;
