@@ -29,7 +29,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline:2px soli
 .patient-fields .patient-number { grid-column:span 2 }
 .required-mark { color:#415e78 }
 .patient-fields :is(input,select) { min-width:0; height:36px }
-.patient-actions { display:grid; grid-template-rows:repeat(2,minmax(0,1fr)); align-items:end; gap:9px; padding-left:16px; border-left:1px solid var(--line) }
+.patient-actions { display:grid; align-items:end; gap:9px; padding-left:16px; border-left:1px solid var(--line) }
 .patient-actions .control { min-height:36px }
 .patient-fields select,.settings select {
   appearance:none;
@@ -213,7 +213,7 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
   .patient-form { grid-template-columns:minmax(0,1fr) }
   .patient-fields { column-gap:8px }
   .patient-fields .patient-id-type,.patient-fields .patient-number { grid-column:span 2 }
-  .patient-actions { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; align-items:stretch; padding:0; border:0 }
+  .patient-actions { grid-template-columns:1fr; align-items:stretch; padding:0; border:0 }
   .patient-actions .control { padding-inline:6px; white-space:normal }
   .detail-fields > div { column-gap:10px }
 }
@@ -256,3 +256,8 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
 
 .tooth.snapshot-changed .tooth-number { background:#d8f3dc; border-top-color:#8bc99a; color:#185c2c }
 #additional-teeth .tooth.snapshot-changed { background:#d8f3dc; border-color:#8bc99a; color:#185c2c }
+
+.status-filters { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; margin:0; padding:0 0 7px; border:0; min-width:0 }
+.status-filters legend { margin-bottom:8px; padding:0; font-size:13px; font-weight:610 }
+.filterbar .status-filters label { display:flex; align-items:center; gap:5px; min-width:0; font-weight:400; cursor:pointer }
+.status-filters input[type=checkbox] { width:16px; height:16px; min-height:0; margin:0; padding:0; accent-color:#1b1b1b }

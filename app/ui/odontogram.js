@@ -48,7 +48,7 @@ function createToothArt(tooth, codes, upper) {
   for (const code of codes) {
     if (wholeToothClasses[code]) anatomy.classList.add(wholeToothClasses[code]);
     const color = surfaceKinds[code[0]];
-    const matchingSurfaces = surfaces[code[1]];
+    const matchingSurfaces = surfaces[code === 'C' || code === 'O' ? 'o' : code[1]];
     if (!color || !matchingSurfaces) continue;
     for (const layer of anatomy.querySelectorAll('g[class*="-surface"]')) {
       const layerName = layer.getAttribute('class').split(' ')[0].replace(/^(up|front|back)-/, '').replace(/-surface$/, '');

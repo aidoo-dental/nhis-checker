@@ -40,7 +40,6 @@ get('lookup-tabs').addEventListener('keydown', (event) => {
   tab.click();
 });
 window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
-get('patient-form').addEventListener('submit', (event) => event.preventDefault());
 get('close-settings').addEventListener('click', () => closeSettings());
 
 function formatDate(date) { return date.split('-').reverse().join('.'); }

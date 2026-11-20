@@ -23,8 +23,9 @@
         </div>
         <form class="patient-form" id="patient-form">
           <div class="patient-fields">
-            <label><span>Име <span class="required-mark" aria-hidden="true">*</span></span><input id="first-name" required maxlength="255" autocomplete="off"></label>
+            <label><span>Име <span class="required-mark" aria-hidden="true">*</span></span><input id="first-name" autofocus required maxlength="255" autocomplete="off"></label>
             <label><span>Фамилия <span class="required-mark" aria-hidden="true">*</span></span><input id="last-name" required maxlength="255" autocomplete="off"></label>
+            <label class="patient-number">Идентификатор<input id="patient-id" required maxlength="255" placeholder="0000000000" autocomplete="off" aria-describedby="environment-note patient-notice"></label>
             <label class="patient-id-type">Тип идентификатор
               <select id="id-type" required>
                 <option value="1">ЕГН</option>
@@ -35,10 +36,9 @@
                 <option value="6">Новородено</option>
               </select>
             </label>
-            <label class="patient-number">Идентификатор<input id="patient-id" required maxlength="255" placeholder="0000000000" autocomplete="off" aria-describedby="environment-note patient-notice"></label>
           </div>
           <div class="patient-actions">
-            <button type="button" class="control primary" id="fetch-data">Изтегли данни</button>
+            <button type="submit" class="control primary" id="fetch-data">Изтегли данни</button>
           </div>
           <div class="patient-feedback">
             <p class="hint" id="environment-note"></p>
@@ -111,7 +111,12 @@
           <div class="filterbar">
             <label>Дата<select id="record-date"><option value="">Всички дати</option></select></label>
             <label>Зъб<select id="record-tooth"><option value="">Всички зъби</option></select></label>
-            <label>Лечение<select id="record-filter"><option value="">Всички</option><option>Отворено</option><option>Приключено</option><option>Анулирано</option></select></label>
+            <fieldset class="status-filters" id="record-filter">
+              <legend>Лечение</legend>
+              <label><input type="checkbox" value="Отворено" checked>Отворено</label>
+              <label><input type="checkbox" value="Приключено" checked>Приключено</label>
+              <label><input type="checkbox" value="Анулирано">Анулирано</label>
+            </fieldset>
           </div>
         </div>
         <div class="table-wrap">

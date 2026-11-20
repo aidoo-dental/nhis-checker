@@ -180,10 +180,12 @@ function populateTreatmentFilters() {
 }
 
 function renderRecords() {
-  const filter = get('record-filter').value;
+  const choices = [...get('record-filter').querySelectorAll('input[type=checkbox]')];
+  const selected = new Set(choices.filter(input => input.checked).map(input => input.value));
+  const allStatuses = selected.size === choices.length;
   const date = get('record-date').value;
   const tooth = get('record-tooth').value;
-  const matching = records.filter((record) => !filter || treatmentState(record) === filter).map((record) => {
+  const matching = records.filter((record) => allStatuses || selected.has(treatmentState(record))).map((record) => {
     const procedures = displayedProcedures(record);
     return {
       record,

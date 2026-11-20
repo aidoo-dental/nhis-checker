@@ -127,7 +127,7 @@ async function fetchLookup() {
     stage = performance.now();
     records = data.treatments;
     foundTreatmentCount = data.found;
-    get('record-filter').value = '';
+    get('record-filter').querySelectorAll('input').forEach(input => { input.checked = input.value !== 'Анулирано'; });
     populateTreatmentFilters();
     renderRecords();
     lastLookupTimings.treatmentsMs = performance.now() - stage;
@@ -145,7 +145,10 @@ async function fetchLookup() {
 
 get('patient-form').addEventListener('input', syncPatient);
 get('patient-form').addEventListener('change', syncPatient);
-get('fetch-data').addEventListener('click', fetchLookup);
+get('patient-form').addEventListener('submit', event => {
+  event.preventDefault();
+  fetchLookup();
+});
 document.querySelectorAll('[data-xml]').forEach(button => button.addEventListener('click', async () => {
   const view = button.dataset.xml;
   if (busy || !lookups[view].id) return;
