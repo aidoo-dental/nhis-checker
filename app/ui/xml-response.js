@@ -52,7 +52,7 @@ function readTreatment(result) {
   };
 }
 
-function readDentalResponse(text, type) {
+function readDentalResponse(text) {
   const readable = text.replace(/^(\uFEFF?<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(['"]))1\.1\2/,
     (_declaration, prefix, quote) => `${prefix}1.0${quote}`);
   const document = new DOMParser().parseFromString(readable, 'application/xml');
@@ -60,23 +60,13 @@ function readDentalResponse(text, type) {
   const header = element(root, 'header');
   const contents = element(root, 'contents');
   if (root.namespaceURI !== nhisNamespace || root.localName !== 'message' ||
-      xmlValue(header, 'messageType') !== type || !contents)
+      xmlValue(header, 'messageType') !== 'D006' || !contents)
     throw new Error('Невалиден XML отговор от НЗИС.');
 
-  if (type === 'D006') {
-    const total = xmlValue(contents, 'foundNumber').trim();
-    const found = Number(total);
-    return {
-      found: /^\+?\d+$/.test(total) && Number.isSafeInteger(found) && found <= 4294967295 ? found : null,
-      treatments: elements(contents, 'results').map(readTreatment)
-    };
-  }
-  const dentalStatus = element(contents, 'dentalStatus');
-  if (!dentalStatus) throw new Error('Отговорът не съдържа дентален статус.');
+  const total = xmlValue(contents, 'foundNumber').trim();
+  const found = Number(total);
   return {
-    current: elements(dentalStatus, 'tooth').map(readTooth),
-    history: elements(contents, 'dentalProcedure').map(readProcedure)
-      .filter(({statusCode}) => !statusCode || statusCode === '6'),
-    date: xmlValue(header, 'createdOn').slice(0, 10)
+    found: /^\+?\d+$/.test(total) && Number.isSafeInteger(found) && found <= 4294967295 ? found : null,
+    treatments: elements(contents, 'results').map(readTreatment)
   };
 }

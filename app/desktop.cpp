@@ -121,17 +121,18 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
     const auto view = field("view");
     if (view != "status" && view != "treatments") fail(QStringLiteral("Непозната справка."));
     if (action == "lookup") {
-        responses.remove(view);
+        responses.clear();
         const auto prefs = settings();
         const PatientQuery patient{field("first"), field("middle"), field("last"),
                                    field("identifierType"), field("identifier")};
         const Practice practice{prefs.value("lpk").toString(), prefs.value("practice").toString()};
-        const auto request = makeDentalMessage(view == "status", patient, practice);
+        const auto request = makeDentalMessage(patient, practice);
         auto xml = client.lookup(window, request, prefs.value("environment") == "production",
-                                 prefs.value("driver").toString(), prefs.value("remember").toBool(), patient, practice);
+                                 prefs.value("driver").toString(), prefs.value("remember").toBool(), patient);
         if (xml.isEmpty()) return {{"empty", true}};
         const auto text = QString::fromUtf8(xml);
-        responses.insert(view, {request.id, request.replyType, std::move(xml)});
+        responses.insert("status", {request.id, request.replyType, xml});
+        responses.insert("treatments", {request.id, request.replyType, std::move(xml)});
         return {{"id", request.id}, {"xml", text}};
     }
     if (action == "discard") {

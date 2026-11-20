@@ -1,8 +1,10 @@
 const lookups = {
-  status: {type: 'D010', id: '', pending: false, empty: false},
-  treatments: {type: 'D006', id: '', pending: false, empty: false}
+  status: {id: '', pending: false, empty: false},
+  treatments: {id: '', pending: false, empty: false}
 };
 let busy = false;
+// Durations only: no identifiers or response contents are retained here.
+let lastLookupTimings = {};
 const patientFields = {first: 'first-name', last: 'last-name',
   identifierType: 'id-type', identifier: 'patient-id'};
 const readPatient = () => Object.fromEntries(Object.entries(patientFields).map(([name, id]) => [name, get(id).value.trim()]));
@@ -37,14 +39,16 @@ get('toggle-patient').addEventListener('click', () => {
 });
 
 function updateLookups() {
+  get('fetch-data').disabled = busy;
   for (const [view, lookup] of Object.entries(lookups)) {
     const section = get('view-' + view);
-    get('fetch-' + view).disabled = busy;
     section.querySelector('[data-xml]').disabled = busy || !lookup.id;
     section.querySelector('[data-result]').hidden = !lookup.id;
     section.querySelector('[data-empty]').hidden = lookup.pending || Boolean(lookup.id);
+    if (view === 'status') section.querySelector('[data-empty]').textContent = lookup.empty
+      ? 'Няма намерени лечения за изчисляване на статус.' : 'Изтегли данните, за да видиш зъбната схема.';
     if (view === 'treatments') section.querySelector('[data-empty]').textContent = lookup.empty
-      ? 'Няма намерени лечения.' : 'Изтегли леченията, за да видиш списъка.';
+      ? 'Няма намерени лечения.' : 'Изтегли данните, за да видиш списъка.';
   }
 }
 function resetResults() {
@@ -56,6 +60,7 @@ function resetResults() {
     setNotice(view, '');
   }
   records = [];
+  recordPage = 0;
   foundTreatmentCount = 0;
   populateTreatmentFilters();
   renderRecords();
@@ -76,7 +81,8 @@ function syncPatient() {
   resetResults();
 }
 
-async function fetchLookup(view) {
+async function fetchLookup() {
+  const view = get('view-status').hidden ? 'treatments' : 'status';
   if (busy) return;
   const form = get('patient-form');
   const missing = [...form.querySelectorAll('[required]')].find(field => !field.value.trim());
@@ -86,51 +92,60 @@ async function fetchLookup(view) {
     return;
   }
   syncPatient();
+  resetResults();
   const version = patientVersion;
-  const lookup = lookups[view];
-  lookup.id = '';
-  lookup.empty = false;
-  lookup.pending = busy = true;
+  busy = true;
+  for (const lookup of Object.values(lookups)) lookup.pending = true;
   setNotice(view, 'Проверка на пациентските данни и извличане от НЗИС…', 'loading');
   updateLookups();
   try {
+    const started = performance.now();
     const reply = await desktop('lookup', {view, ...readPatient()});
+    lastLookupTimings = {requestMs: performance.now() - started};
     if (version !== patientVersion) {
-      if (reply.id) await desktop('discard', {view, id: reply.id});
+      if (reply.id) await Promise.all(Object.keys(lookups).map(view => desktop('discard', {view, id: reply.id})));
       return;
     }
     if (reply.empty) {
-      lookup.empty = true;
+      for (const lookup of Object.values(lookups)) lookup.empty = true;
       setNotice(view, '');
       patientLoaded();
       return;
     }
-    const data = readDentalResponse(reply.xml, lookup.type);
-    if (view === 'status') displayDentition(data);
-    else {
-      records = data.treatments;
-      foundTreatmentCount = data.found;
-      get('record-filter').value = '';
-      populateTreatmentFilters();
-      renderRecords();
+    setNotice(view, 'Данните са получени. Подготовка на изгледите…', 'loading');
+    await new Promise(resolve => setTimeout(resolve, 16));
+    if (version !== patientVersion) {
+      await Promise.all(Object.keys(lookups).map(view => desktop('discard', {view, id: reply.id})));
+      return;
     }
-    lookup.id = reply.id;
+    let stage = performance.now();
+    const data = readDentalResponse(reply.xml);
+    lastLookupTimings.xmlParseMs = performance.now() - stage;
+    stage = performance.now();
+    displayDentition(data);
+    lastLookupTimings.dentitionMs = performance.now() - stage;
+    stage = performance.now();
+    records = data.treatments;
+    foundTreatmentCount = data.found;
+    get('record-filter').value = '';
+    populateTreatmentFilters();
+    renderRecords();
+    lastLookupTimings.treatmentsMs = performance.now() - stage;
+    for (const lookup of Object.values(lookups)) lookup.id = reply.id;
     setNotice(view, 'Данните са получени от НЗИС.', 'done');
     patientLoaded();
   } catch (error) {
     if (version === patientVersion) setNotice(view, error.message, 'cancelled');
   } finally {
-    lookup.pending = busy = false;
+    busy = false;
+    for (const lookup of Object.values(lookups)) lookup.pending = false;
     updateLookups();
   }
 }
 
 get('patient-form').addEventListener('input', syncPatient);
 get('patient-form').addEventListener('change', syncPatient);
-document.querySelectorAll('[data-fetch]').forEach(button => button.addEventListener('click', () => {
-  selectView(button.dataset.fetch);
-  fetchLookup(button.dataset.fetch);
-}));
+get('fetch-data').addEventListener('click', fetchLookup);
 document.querySelectorAll('[data-xml]').forEach(button => button.addEventListener('click', async () => {
   const view = button.dataset.xml;
   if (busy || !lookups[view].id) return;

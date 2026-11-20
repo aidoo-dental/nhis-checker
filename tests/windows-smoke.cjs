@@ -75,7 +75,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const originalDesktop = desktop;
       desktop = async () => ({id:'test-patient', xml:'<message xmlns="https://www.his.bg"><header><messageType value="D006"/></header><contents><foundNumber value="0"/></contents></message>'});
       try {
-        await fetchLookup('treatments');
+        await fetchLookup();
         if (!get('patient-form').hidden || !get('patient-summary').textContent.includes('Тест Пациент') ||
             !get('patient-summary').textContent.includes('0000000000') ||
             get('view-patient').getBoundingClientRect().height >= expandedHeight - 50 ||
@@ -90,6 +90,35 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         return true;
       } finally { desktop = originalDesktop; }
     })()`), 'Patient form must collapse after loading and expand for another patient');
+    assert(await evaluate(`(async () => {
+      const originalDesktop = desktop;
+      get('first-name').value = 'Тест';
+      get('last-name').value = 'Пациент';
+      get('patient-id').value = '0000000000';
+      syncPatient();
+      const xml = '<message xmlns="https://www.his.bg"><header><messageType value="D006"/></header><contents><foundNumber value="1"/><results><dentalTreatment><status value="2"/><dentalProcedure><datePerformed value="2026-01-02"/><status value="6"/><tooth><toothIndex value="11"/><condition><code value="O"/></condition></tooth></dentalProcedure><dentalProcedure><datePerformed value="2026-01-01"/><status value="6"/><tooth><toothIndex value="11"/><condition><code value="C"/></condition></tooth></dentalProcedure></dentalTreatment></results></contents></message>';
+      let requests = 0;
+      desktop = async (action) => { if (action === 'lookup') ++requests; return {id:'test-status', xml}; };
+      try {
+        await fetchLookup();
+        if (requests !== 1 || document.querySelectorAll('#fetch-data').length !== 1 ||
+            get('fetch-status') || get('fetch-treatments') || records.length !== 1 ||
+            lookups.treatments.id !== 'test-status' || lookups.status.id !== 'test-status' || chartDate !== '2026-01-02' ||
+            dentitionByDate.get(chartDate).get('11')[0] !== 'O' ||
+            dentitionByDate.get('2026-01-01').get('11')[0] !== 'C') return false;
+        displayDentition({treatments:[]});
+        if (dentitionByDate.size || get('dentition-timeline').children.length ||
+            !get('tooth-summary').hidden || get('additional-teeth').children.length) return false;
+        desktop = async () => ({empty:true});
+        await fetchLookup();
+        return lookups.status.empty && lookups.treatments.empty && !lookups.status.id && !lookups.treatments.id &&
+          get('view-status').querySelector('[data-result]').hidden;
+      } finally {
+        for (const id of ['first-name', 'last-name', 'patient-id']) get(id).value = '';
+        syncPatient();
+        desktop = originalDesktop;
+      }
+    })()`), 'Status lookup must replay D006 and clear empty results');
     if (webview2) {
       assert(await evaluate("!!window.chrome?.webview && !window.qt?.webChannelTransport"));
       await evaluate("location.assign('https://outside.invalid/')");
@@ -154,10 +183,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const day = '2026-01-02';
       showView('status');
       get('view-status').querySelector('[data-result]').hidden = false;
-      displayDentition({date:'2026-01-03',history:[],current:[
+      displayDentition({treatments:[{procedures:[{date:day,teeth:[
         {fdi:'11',date:day,conditions:['E']}, {fdi:'51',date:day,conditions:['O']},
         {fdi:'11.1',date:day,conditions:['C']}
-      ]});
+      ]}, {date:'2026-01-03',teeth:[{fdi:'11',conditions:['O']}]}]}]});
       const additional = [...get('additional-teeth').children];
       const tooth = get('upper').querySelector('button[aria-label^="Зъб 11,"]');
       tooth.click();
@@ -184,6 +213,35 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         additional.map(button => button.textContent).includes('11.1') && dentitionByDate.get(day).size === 3 &&
         selected && inside && cleared && extraSelected && dates && hover && left && focus && historical;
     })()`), 'Odontogram selection, additional teeth or status timeline failed');
+    assert(await evaluate(`(() => {
+      const statuses = new Map([['11', ['C']]]);
+      renderOdontogram(statuses);
+      if (document.querySelectorAll('.tooth-art img').length !== 32 || document.querySelector('.tooth-art svg')) return false;
+      const original = get('upper').querySelectorAll('.tooth');
+      renderOdontogram(statuses);
+      if (get('upper').querySelectorAll('.tooth')[7] !== original[7]) return false;
+      statuses.set('11', ['E']);
+      renderOdontogram(statuses);
+      const updated = get('upper').querySelectorAll('.tooth');
+      if (updated[0] !== original[0] || updated[7] === original[7] || !updated[7].classList.contains('missing')) return false;
+      records = Array.from({length:205}, (_, i) => ({nrn:String(i), statusCode:'2', status:'Затворено', start:'2026-01-01',
+        procedures:[{date:'2026-01-01', code:'101', teeth:[{fdi:'11',conditions:['C']}]}]}));
+      populateTreatmentFilters();
+      recordPage = 0; renderRecords();
+      const seen = new Set();
+      for (let page = 0; page < 3; page++) {
+        const rows = get('records').querySelectorAll('.summary-row');
+        if (rows.length !== (page === 2 ? 5 : 100)) return false;
+        for (const row of rows) seen.add(row.cells[6].textContent);
+        if (page < 2) get('records-next').click();
+      }
+      if (seen.size !== 205 || !get('records-next').disabled) return false;
+      get('record-tooth').value = '11';
+      get('record-tooth').dispatchEvent(new Event('change'));
+      const reset = recordPage === 0 && get('records').querySelectorAll('.summary-row').length === 100;
+      records = []; populateTreatmentFilters(); renderRecords();
+      return reset;
+    })()`), 'Tooth reuse and complete paginated treatment navigation failed');
     assert(await evaluate(`(async()=>{document.querySelector('#open-settings').click();document.querySelector('#clear-errors').click();await errorLogQueue;return document.querySelector('#error-log').value==='';})()`));
     await evaluate(`(() => {
       document.querySelector('#view-settings').close();

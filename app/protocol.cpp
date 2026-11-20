@@ -20,7 +20,7 @@ void validatePractice(const Practice &practice) {
         fail(QStringLiteral("Въведи 10-цифрения РЗИ номер на практиката в „Настройки“."));
 }
 
-DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const Practice &practice) {
+DentalMessage makeDentalMessage(const PatientQuery &patient, const Practice &practice) {
     if (patient.first.trimmed().isEmpty() || patient.last.trimmed().isEmpty() || patient.identifier.isEmpty() ||
         patient.identifier.size() > 255 || patient.first.size() > 255 || patient.middle.size() > 255 ||
         patient.last.size() > 255 || !QRegularExpression("^[1-6]$").match(patient.identifierType).hasMatch())
@@ -32,9 +32,9 @@ DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const 
 
     DentalMessage result;
     result.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    result.type = status ? "D009" : "D005";
-    result.replyType = status ? "D010" : "D006";
-    result.route = status ? "/v1/edental/status/get" : "/v1/edental/record/fetch";
+    result.type = "D005";
+    result.replyType = "D006";
+    result.route = "/v1/edental/record/fetch";
     const auto now = QDateTime::currentDateTimeUtc().toTimeZone(QTimeZone("Europe/Sofia"));
     QXmlStreamWriter xml(&result.xml);
     const auto field = [&](const QString &name, const QString &value) {
@@ -59,11 +59,6 @@ DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const 
     xml.writeStartElement("nhis:contents");
     field("identifierType", patient.identifierType);
     field("identifier", patient.identifier);
-    if (status) {
-        field("fromDate", "2008-01-01");
-        field("toDate", now.date().toString(Qt::ISODate));
-        field("practiceNumber", practice.registration);
-    }
     xml.writeEndElement();
     xml.writeEndElement();
     xml.writeEndDocument();
@@ -150,20 +145,15 @@ void validateDentalResponse(const QDomDocument &document, const DentalMessage &r
         fail(QStringLiteral("Отговорът на НЗИС е за друга заявка. Повтори справката."));
 
     const auto contents = child(root, "contents");
-    if (type == "D010") {
-        if (child(contents, "dentalStatus").isNull())
-            fail(QStringLiteral("В отговора на НЗИС липсва денталният статус."));
-    } else {
-        // The reported total is informational when records are present. Patient
-        // identity is verified separately for every returned record.
-        if (!child(contents, "results").isNull()) return;
-        bool ok = false;
-        const auto total = value(contents, "foundNumber").toUInt(&ok);
-        if (!ok)
-            fail(QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."));
-        if (total != 0)
-            fail(QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."));
-    }
+    // The reported total is informational when records are present. Patient
+    // identity is verified separately for every returned record.
+    if (!child(contents, "results").isNull()) return;
+    bool ok = false;
+    const auto total = value(contents, "foundNumber").toUInt(&ok);
+    if (!ok)
+        fail(QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."));
+    if (total != 0)
+        fail(QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."));
 }
 
 void validatePatientIdentity(const QDomDocument &treatments, const PatientQuery &patient) {

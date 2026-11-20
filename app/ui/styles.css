@@ -80,8 +80,8 @@ input,select { width:100%; min-height:35px; border:1px solid #d7d7d7; border-rad
 .tooth[aria-pressed="true"] { border-color:#272727; box-shadow:0 0 0 1px #272727 }
 .tooth.missing { border-style:dashed }
 .tooth-art { display:grid; place-items:center; width:100% }
-.tooth-art svg { display:block; width:min(100%,52px); height:auto; aspect-ratio:65/190 }
-.tooth-art.mirrored svg { transform:scaleX(-1) }
+.tooth-art img { display:block; width:min(100%,52px); height:auto; aspect-ratio:65/190 }
+.tooth-art.mirrored img { transform:scaleX(-1) }
 .tooth.unreported .tooth-art { opacity:.5 }
 .tooth-number { display:grid; place-items:center; align-self:stretch; justify-self:stretch; border-top:1px solid #ededed; background:#fafafa; font-size:11px; font-weight:630; font-variant-numeric:tabular-nums }
 .legend { display:flex; flex-wrap:wrap; gap:7px 13px; margin-top:10px; color:var(--muted); font-size:11px }
@@ -251,3 +251,8 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
 .environment-field { margin-top:12px }
 .notice.has-icon { display:flex; align-items:flex-start; gap:7px }
 .notice.has-icon .status-icon { flex:none }
+
+.record-pages { margin-top:12px }
+
+.tooth.snapshot-changed .tooth-number { background:#d8f3dc; border-top-color:#8bc99a; color:#185c2c }
+#additional-teeth .tooth.snapshot-changed { background:#d8f3dc; border-color:#8bc99a; color:#185c2c }

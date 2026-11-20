@@ -1,5 +1,7 @@
 let records = [];
 let foundTreatmentCount = 0;
+let recordPage = 0;
+const recordsPerPage = 100;
 
 function treatmentState(record) {
   const hasEndDate = Boolean(record.end) && Number.isFinite(Date.parse(record.end));
@@ -190,8 +192,7 @@ function renderRecords() {
         (!tooth || procedure.teeth?.some((entry) => String(entry.fdi) === tooth)))
     };
   }).filter(({ procedures }) => procedures.length > 0);
-  const rows = get('records');
-  rows.replaceChildren();
+  const rows = document.createElement('tbody');
   get('records-count').textContent = 'Получени лечения (' + records.length + ')';
   get('records-limit').textContent = foundTreatmentCount === null
     ? 'НЗИС не посочи валиден общ брой лечения.'
@@ -206,8 +207,14 @@ function renderRecords() {
     procedures.map((procedure, index) => ({record, procedure, recordIndex, index})));
   entries.sort((a, b) => treatmentSortDate(b.record, b.procedure)
     .localeCompare(treatmentSortDate(a.record, a.procedure)));
+  const pageCount = Math.ceil(entries.length / recordsPerPage);
+  recordPage = Math.max(0, Math.min(recordPage, pageCount - 1));
+  get('record-pages').hidden = pageCount <= 1;
+  get('records-previous').disabled = recordPage === 0;
+  get('records-next').disabled = recordPage + 1 >= pageCount;
+  get('records-page').textContent = 'Страница ' + (recordPage + 1) + ' от ' + pageCount + ' · ' + entries.length + ' дейности';
   let previousRecord;
-  for (const {record, procedure, recordIndex, index} of entries) {
+  for (const {record, procedure, recordIndex, index} of entries.slice(recordPage * recordsPerPage, (recordPage + 1) * recordsPerPage)) {
     const detailsId = 'treatment-details-' + recordIndex + '-' + index;
     const row = rows.insertRow();
     row.className = record !== previousRecord ? 'summary-row treatment-start' : 'summary-row';
@@ -254,5 +261,14 @@ function renderRecords() {
       toggle.setAttribute('aria-expanded', String(expanding));
     });
   }
+  get('records').replaceChildren(...rows.children);
 }
-for (const id of ['record-filter', 'record-date', 'record-tooth']) get(id).addEventListener('change', renderRecords);
+for (const id of ['record-filter', 'record-date', 'record-tooth']) get(id).addEventListener('change', () => {
+  recordPage = 0;
+  renderRecords();
+});
+for (const [id, step] of [['records-previous', -1], ['records-next', 1]]) get(id).addEventListener('click', () => {
+  recordPage += step;
+  renderRecords();
+  document.querySelector('main').scrollTop = 0;
+});

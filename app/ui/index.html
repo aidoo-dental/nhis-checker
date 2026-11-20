@@ -38,8 +38,7 @@
             <label class="patient-number">Идентификатор<input id="patient-id" required maxlength="255" placeholder="0000000000" autocomplete="off" aria-describedby="environment-note patient-notice"></label>
           </div>
           <div class="patient-actions">
-            <button type="button" class="control primary" id="fetch-status" data-fetch="status">Изтегли статус</button>
-            <button type="button" class="control primary" id="fetch-treatments" data-fetch="treatments">Изтегли лечение</button>
+            <button type="button" class="control primary" id="fetch-data">Изтегли данни</button>
           </div>
           <div class="patient-feedback">
             <p class="hint" id="environment-note"></p>
@@ -59,7 +58,7 @@
         <h1>Дентален статус</h1>
         <button type="button" class="control" data-xml="status" disabled>Изтегли XML</button>
       </header>
-      <p class="empty-result" data-empty>Изтегли статуса, за да видиш одонтограмата.</p>
+      <p class="empty-result" data-empty>Изтегли данните, за да видиш одонтограмата.</p>
       <p class="notice" data-notice role="status"></p>
       <div class="card" data-result hidden>
         <p class="chart-caption" id="chart-date" aria-live="polite"></p>
@@ -100,7 +99,7 @@
         <h1>Лечения</h1>
         <button type="button" class="control" data-xml="treatments" disabled>Изтегли XML</button>
       </header>
-      <p class="empty-result" data-empty>Изтегли леченията, за да видиш списъка.</p>
+      <p class="empty-result" data-empty>Изтегли данните, за да видиш списъка.</p>
       <p class="notice" data-notice role="status"></p>
       <div class="card" data-result hidden>
         <div class="cardhead">
@@ -131,6 +130,11 @@
             <tbody id="records" role="rowgroup"></tbody>
           </table>
         </div>
+        <nav class="actions record-pages" id="record-pages" aria-label="Страници с дейности" hidden>
+          <button type="button" class="control" id="records-previous">Предишна</button>
+          <span id="records-page" class="hint" aria-live="polite"></span>
+          <button type="button" class="control" id="records-next">Следваща</button>
+        </nav>
         <p id="no-records" class="hint" hidden>Няма записи по този филтър.</p>
       </div>
     </section>

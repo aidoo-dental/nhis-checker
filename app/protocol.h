@@ -15,7 +15,7 @@ struct DentalMessage {
 };
 
 void validatePractice(const Practice &practice);
-DentalMessage makeDentalMessage(bool status, const PatientQuery &patient, const Practice &practice);
+DentalMessage makeDentalMessage(const PatientQuery &patient, const Practice &practice);
 QDomDocument tryParseNhIs(const QByteArray &xml);
 QDomDocument parseNhIs(const QByteArray &xml);
 QDomElement child(const QDomElement &parent, const QString &name);

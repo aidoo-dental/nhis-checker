@@ -18,14 +18,19 @@ const surfaces = {
   l:['lingual','palatal'], c:['cervical_vestibular','cervical_lingual','cervical_palatal']
 };
 
-function makeToothArt(tooth, codes, upper) {
+const toothTemplates = new Map();
+
+function createToothArt(tooth, codes, upper) {
   const key = (upper ? 'upper' : 'lower') + tooth % 10;
   const quadrant = Math.floor(tooth / 10);
   const wrapper = document.createElement('div');
   wrapper.className = 'tooth-art' + ([1,3,5,7].includes(quadrant) ? ' mirrored' : '');
   wrapper.setAttribute('data-v-6523b72c', '');
-  const parser = new DOMParser();
-  const svg = document.importNode(parser.parseFromString(aidooGeometry[key], 'image/svg+xml').documentElement, true);
+  if (!toothTemplates.has(key)) {
+    const parsed = new DOMParser().parseFromString(aidooGeometry[key], 'image/svg+xml');
+    toothTemplates.set(key, document.importNode(parsed.documentElement, true));
+  }
+  const svg = toothTemplates.get(key).cloneNode(true);
   const ids = new Map();
   svg.querySelectorAll('[id]').forEach((element, index) => {
     const old = element.id;
@@ -51,6 +56,41 @@ function makeToothArt(tooth, codes, upper) {
     }
   }
   wrapper.append(svg);
+  return wrapper;
+}
+
+// Isolate SVG masks and paths from the page's layout/paint tree. The browser
+// can reuse the decoded image when revisiting a snapshot or showing the tab.
+const toothImageCache = new Map();
+let toothImageStyles;
+function makeToothArt(tooth, codes, upper) {
+  const key = JSON.stringify([upper, tooth % 10, [...new Set(codes)].sort()]);
+  let source = toothImageCache.get(key);
+  if (!source) {
+    if (toothImageStyles === undefined) {
+      toothImageStyles = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
+        .filter(rule => rule.selectorText?.includes('[data-v-6523b72c]'))
+        .map(rule => rule.cssText).join(' ');
+    }
+    const svg = createToothArt(tooth, codes, upper).firstElementChild;
+    svg.setAttribute('data-v-6523b72c', '');
+    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    style.textContent = toothImageStyles;
+    svg.prepend(style);
+    source = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    // Bound memory use while browsing patients with many historical states.
+    if (toothImageCache.size >= 256) toothImageCache.delete(toothImageCache.keys().next().value);
+    toothImageCache.set(key, source);
+  }
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tooth-art' + ([1,3,5,7].includes(Math.floor(tooth / 10)) ? ' mirrored' : '');
+  const image = document.createElement('img');
+  image.alt = '';
+  image.draggable = false;
+  image.width = 65;
+  image.height = 190;
+  image.src = source;
+  wrapper.append(image);
   return wrapper;
 }
 
@@ -135,24 +175,62 @@ document.addEventListener('click', event => {
   hideToothTooltip();
 }, true);
 
-function renderOdontogram(statuses) {
+function markChangedTooth(button, changed) {
+  const label = 'Ново или променено състояние спрямо предишната дата';
+  button.classList.toggle('snapshot-changed', changed);
+  if (changed) {
+    button.setAttribute('aria-description', label);
+    button.title = label;
+  } else {
+    button.removeAttribute('aria-description');
+    button.removeAttribute('title');
+  }
+}
+
+function changedSnapshotTeeth(date) {
+  const dates = [...dentitionByDate.keys()].sort();
+  const index = dates.indexOf(date);
+  const previous = dentitionByDate.get(dates[index - 1]) ?? new Map();
+  const changed = new Set();
+  for (const [tooth, codes] of dentitionByDate.get(date) ?? []) {
+    const before = new Set(previous.get(tooth) ?? []);
+    const after = new Set(codes);
+    if (!previous.has(tooth) || before.size !== after.size || [...after].some(code => !before.has(code)))
+      changed.add(tooth);
+  }
+  return changed;
+}
+
+function renderOdontogram(statuses, changed = new Set()) {
   hideToothTooltip();
-  get('upper').replaceChildren();
-  get('lower').replaceChildren();
   const displayed = new Set();
   for (const [index, teeth] of quadrants.entries()) {
-    const quadrant = document.createElement('div');
-    quadrant.className = 'quad';
-    for (const permanent of teeth) {
+    const jaw = get(index < 2 ? 'upper' : 'lower');
+    let quadrant = jaw.children[index % 2];
+    if (!quadrant) {
+      quadrant = document.createElement('div');
+      quadrant.className = 'quad';
+      jaw.append(quadrant);
+    }
+    for (const [position, permanent] of teeth.entries()) {
       const temporary = [5,6,8,7][index] * 10 + permanent % 10;
       const tooth = permanent % 10 <= 5 && statuses.has(String(temporary)) && !statuses.has(String(permanent)) ? temporary : permanent;
       displayed.add(String(tooth));
       const codes = statuses.get(String(tooth)) ?? [];
+      const previous = quadrant.children[position];
+      const state = JSON.stringify([tooth, codes]);
+      if (previous?.dataset.state === state) {
+        markChangedTooth(previous, changed.has(String(tooth)));
+        previous.setAttribute('aria-pressed', String(String(tooth) === selectedTooth));
+        continue;
+      }
       const button = document.createElement('button');
+      button.dataset.state = state;
       button.type = 'button';
       button.className = 'tooth' + (codes.includes('E') ? ' missing' : '') + (codes.length ? '' : ' unreported');
       button.setAttribute('aria-label', 'Зъб ' + tooth + (codes.length ? ', ' + codes.join(', ') : ', няма подаден статус'));
       button.setAttribute('aria-pressed', String(String(tooth) === selectedTooth));
+      markChangedTooth(button, changed.has(String(tooth)));
       const number = document.createElement('span');
       number.className = 'tooth-number';
       number.textContent = tooth;
@@ -168,9 +246,9 @@ function renderOdontogram(statuses) {
         showToothTooltip(button, tooth, codes);
       });
       button.addEventListener('blur', () => hideToothTooltip(button));
-      quadrant.append(button);
+      if (previous) previous.replaceWith(button);
+      else quadrant.append(button);
     }
-    get(index < 2 ? 'upper' : 'lower').append(quadrant);
   }
   const additional = get('additional-teeth');
   additional.replaceChildren();
@@ -182,6 +260,7 @@ function renderOdontogram(statuses) {
     button.textContent = tooth;
     button.setAttribute('aria-label', 'Зъб ' + tooth + (codes.length ? ', ' + codes.join(', ') : ', няма подаден статус'));
     button.setAttribute('aria-pressed', String(String(tooth) === selectedTooth));
+    markChangedTooth(button, changed.has(String(tooth)));
     button.addEventListener('click', () => selectTooth(button, String(tooth), codes));
     additional.append(button);
   }
@@ -190,7 +269,7 @@ function renderOdontogram(statuses) {
 function showDentitionDate(date) {
   const statuses = dentitionByDate.get(date);
   if (!statuses) return;
-  renderOdontogram(statuses);
+  renderOdontogram(statuses, changedSnapshotTeeth(date));
   updateToothSummary(statuses.get(selectedTooth));
   for (const button of get('dentition-timeline').querySelectorAll('button')) {
     button.setAttribute('aria-pressed', String(button.dataset.date === date));
@@ -243,30 +322,37 @@ function renderDentitionTimeline() {
   requestAnimationFrame(() => { timeline.scrollLeft = timeline.scrollWidth; });
 }
 
-function displayDentition({current, history, date}) {
-  selectedTooth = null;
-  chartDate = date || [...current.map(tooth => tooth.date), ...history.map(item => item.date.slice(0, 10))].sort().pop() || '';
-  const updates = new Map();
-  const record = (day, tooth) => {
-    if (!day || (chartDate && day > chartDate)) return;
-    if (!updates.has(day)) updates.set(day, new Map());
-    if (tooth?.fdi && tooth.conditions.length) updates.get(day).set(tooth.fdi, tooth.conditions);
-  };
-  for (const procedure of history) {
-    const day = procedure.date.slice(0, 10);
-    record(day);
-    for (const tooth of procedure.teeth) record(day, tooth);
-  }
-  for (const tooth of current) record(tooth.date, tooth);
-  dentitionByDate = new Map();
+// One cumulative snapshot per day, after replaying that day's procedures in time order.
+// Missing tooth conditions are not updates; a reported condition replaces the prior set.
+function buildDentitionSnapshots(treatments) {
+  const procedures = treatments.filter(treatment => treatment.statusCode !== '3')
+    .flatMap(treatment => treatment.procedures)
+    .filter(procedure => procedure.statusCode !== '7' &&
+      /^\d{4}-\d{2}-\d{2}(?:$|T)/.test(procedure.date) && Number.isFinite(Date.parse(procedure.date)))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const snapshots = new Map();
   const known = new Map();
-  for (const [day, teeth] of [...updates].sort(([a], [b]) => a.localeCompare(b))) {
-    for (const [tooth, codes] of teeth) known.set(tooth, codes);
-    dentitionByDate.set(day, new Map(known));
+  for (const procedure of procedures) {
+    const updates = procedure.teeth.filter(tooth => tooth.fdi && tooth.conditions.length);
+    if (!updates.length) continue;
+    for (const tooth of updates) known.set(tooth.fdi, [...tooth.conditions]);
+    snapshots.set(procedure.date.slice(0, 10), new Map(known));
   }
-  dentitionByDate.set(chartDate, new Map(current.filter(tooth => tooth.fdi).map(tooth => [tooth.fdi, tooth.conditions])));
+  return snapshots;
+}
+
+function displayDentition({treatments}) {
+  selectedTooth = null;
+  dentitionByDate = buildDentitionSnapshots(treatments);
+  chartDate = [...dentitionByDate.keys()].sort().pop() || '';
   renderDentitionTimeline();
-  showDentitionDate(chartDate);
+  if (chartDate) showDentitionDate(chartDate);
+  else {
+    renderOdontogram(new Map());
+    updateToothSummary();
+    get('dentition-chart').classList.remove('is-historical');
+    get('chart-date').textContent = 'Няма записани състояния на зъби.';
+  }
 }
 
 function hideChartTooltips() {

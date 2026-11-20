@@ -150,8 +150,8 @@ void verifyIdentity() {
 void verifyProtocol() {
     const PatientQuery patient{QStringLiteral("Иван & Мария"), {}, QStringLiteral("Тестови"), "4", "ABC\"123"};
     const Practice practice{"012345678", "0012345678"};
-    const auto treatment = makeDentalMessage(false, patient, practice);
-    const auto status = makeDentalMessage(true, patient, practice);
+    const auto treatment = makeDentalMessage(patient, practice);
+    const auto status = makeDentalMessage(patient, practice);
     const auto query = parseNhIs(treatment.xml).documentElement();
     const auto treatmentContents = child(query, "contents");
     expect(value(child(query, "header"), "messageType") == "D005" &&
@@ -161,13 +161,10 @@ void verifyProtocol() {
            child(treatmentContents, "name").isNull() &&
            child(treatmentContents, "nrnDental").isNull() &&
            child(treatmentContents, "treatmentStart").isNull(), "D005 must search by identifier only");
-    const auto statusRoot = parseNhIs(status.xml).documentElement();
-    const auto statusContents = child(statusRoot, "contents");
-    expect(value(statusContents, "practiceNumber") == practice.registration &&
-           value(child(statusRoot, "header"), "senderId") == practice.lpk &&
-           child(statusContents, "name").isNull(), "D009 request fields differ from specification");
     expect(treatment.id != status.id && treatment.route == "/v1/edental/record/fetch" &&
-           status.route == "/v1/edental/status/get", "Unexpected request routing");
+           status.replyType == "D006" && status.route == treatment.route, "Unexpected request routing");
+    expect(child(treatmentContents, "fromDate").isNull() && child(treatmentContents, "toDate").isNull(),
+           "The complete history must be requested without date limits");
     const QByteArray response = "<?xml version=\"1.0\"?><h:message xmlns:h=\"https://www.his.bg\">"
         "<h:header><h:messageType value=\"D006\"/><h:messageId value=\"" + treatment.id.toUtf8() +
         "\"/></h:header><h:contents><h:foundNumber value=\"0\"/></h:contents></h:message>";
