@@ -228,6 +228,12 @@ dialog::backdrop { background:rgb(0 0 0 / .22) }
 [data-v-6523b72c] .Periapical-lesion [class*="periodontis"] { display: block !important; fill: rgb(242, 156, 156) !important; stroke: rgb(242, 156, 156) !important; stroke-opacity: 1 !important; fill-opacity: 1 !important; }
 [data-v-6523b72c] .Pulpitis .root-canal, [data-v-6523b72c] .Periapical-lesion .root-canal { stroke: rgba(146, 33, 33, 0.25) !important; fill: rgb(242, 156, 156) !important; stroke-opacity: 1 !important; }
 [data-v-6523b72c] .Root-canal-treatment .root-canal { stroke: rgb(105, 156, 185) !important; fill: rgb(209, 237, 252) !important; stroke-opacity: 1 !important; }
+[data-v-6523b72c] .Non-caries-lesion > [class*="stroke"] { stroke: #b885a2 !important; stroke-opacity: 1 !important; }
+[data-v-6523b72c] .Non-caries-lesion > [class*="fill"] { fill: #dab1c8 !important; fill-opacity: 1 !important; }
+[data-v-6523b72c] .Defective-restoration > [class*="stroke"] { stroke: #da7d7d !important; stroke-opacity: 1 !important; }
+[data-v-6523b72c] .Defective-restoration > [class*="fill"] { fill: url(#dr-hatch) !important; fill-opacity: 1 !important; }
+[data-v-6523b72c] .Pulp-necrosis .root-canal, [data-v-6523b72c] .Pulp-necrosis .root-canal path { stroke: #3a3a3a !important; fill: #6b6b6b !important; stroke-opacity: 1 !important; }
+[data-v-6523b72c] g.Resorption .resorption { display: block !important; }
 [data-v-6523b72c] .Root [class*="crown"], [data-v-6523b72c] .Root .up-view .fracture, [data-v-6523b72c] .Root .back-view .fracture { display: none !important; }
 [data-v-6523b72c] .Crown.Fracture .fracture { display: block !important; }
 [data-v-6523b72c] g.Crown [class*="crown"][class*="line"], [data-v-6523b72c] g.Fixed-prosthodontic-retainer [class*="crown"][class*="line"] { display: block !important; stroke: rgb(212, 119, 52) !important; }

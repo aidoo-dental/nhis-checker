@@ -213,6 +213,38 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         additional.map(button => button.textContent).includes('11.1') && dentitionByDate.get(day).size === 3 &&
         selected && inside && cleared && extraSelected && dates && hover && left && focus && historical;
     })()`), 'Odontogram selection, additional teeth or status timeline failed');
+    assert(await evaluate(`(async () => {
+      const pixels = async (tooth, codes, upper) => {
+        const image = makeToothArt(tooth, codes, upper).firstElementChild;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = 65; canvas.height = 190;
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0);
+        return context.getImageData(0, 0, 65, 190).data;
+      };
+      for (const upper of [true, false]) {
+        for (let number = 1; number <= 8; number++) {
+          const tooth = (upper ? 10 : 40) + number;
+          const baseline = await pixels(tooth, [], upper);
+          for (const code of ['DR', 'N', 'Res', 'NC']) {
+            const rendered = await pixels(tooth, [code], upper);
+            if (!rendered.some((value, index) => value !== baseline[index])) return false;
+          }
+        }
+      }
+      const sources = new Set();
+      for (const kind of ['DR', 'NC']) {
+        for (const region of ['o', 'm', 'd', 'b', 'l', 'c']) {
+          const image = makeToothArt(16, [kind + region], true).firstElementChild;
+          await image.decode();
+          sources.add(image.src);
+          const svg = new DOMParser().parseFromString(decodeURIComponent(image.src.split(',')[1]), 'image/svg+xml');
+          if (kind === 'DR' && !svg.querySelector('#dr-hatch line')) return false;
+        }
+      }
+      return sources.size === 12;
+    })()`), 'All tooth shapes must render DR, N, Res and NC, including their surface variants');
     assert(await evaluate(`(() => {
       const statuses = new Map([['11', ['C']]]);
       renderOdontogram(statuses);

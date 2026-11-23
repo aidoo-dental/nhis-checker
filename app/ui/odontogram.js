@@ -10,9 +10,10 @@ const wholeToothClasses = {
   B: 'Fixed-prosthodontic-pontic', X: 'Removable-prosthodontic',
   P: 'Pulpitis', G: 'Periapical-lesion', R: 'Root', Pa: 'Periodontitis',
   F: 'Fracture', I: 'Implant', Re: 'Impacted', Rc: 'Root-canal-treatment',
-  Rp: 'Radicular-post', S: 'Splint', T: 'Calculus'
+  Rp: 'Radicular-post', S: 'Splint', T: 'Calculus',
+  N: 'Pulp-necrosis', Res: 'Resorption'
 };
-const surfaceKinds = { O:'Restoration', C:'Caries' };
+const surfaceKinds = { O:'Restoration', C:'Caries', NC:'Non-caries-lesion', DR:'Defective-restoration' };
 const surfaces = {
   o:['occlusal'], m:['mesial'], d:['distal'], b:['vestibular'],
   l:['lingual','palatal'], c:['cervical_vestibular','cervical_lingual','cervical_palatal']
@@ -47,9 +48,10 @@ function createToothArt(tooth, codes, upper) {
   const anatomy = svg.querySelector('g.' + key);
   for (const code of codes) {
     if (wholeToothClasses[code]) anatomy.classList.add(wholeToothClasses[code]);
-    const color = surfaceKinds[code[0]];
-    const matchingSurfaces = surfaces[code === 'C' || code === 'O' ? 'o' : code[1]];
-    if (!color || !matchingSurfaces) continue;
+    const surface = code.match(/^(DR|NC|O|C)([omdblc])?$/);
+    if (!surface) continue;
+    const color = surfaceKinds[surface[1]];
+    const matchingSurfaces = surfaces[surface[2] ?? 'o'];
     for (const layer of anatomy.querySelectorAll('g[class*="-surface"]')) {
       const layerName = layer.getAttribute('class').split(' ')[0].replace(/^(up|front|back)-/, '').replace(/-surface$/, '');
       if (matchingSurfaces.includes(layerName)) layer.classList.add(color);
@@ -73,6 +75,10 @@ function makeToothArt(tooth, codes, upper) {
         .map(rule => rule.cssText).join(' ');
     }
     const svg = createToothArt(tooth, codes, upper).firstElementChild;
+    // Each cached image has its own SVG document and hatch definition.
+    if (svg.querySelector('.Defective-restoration')) {
+      svg.insertAdjacentHTML('afterbegin', '<defs><pattern id="dr-hatch" patternUnits="userSpaceOnUse" width="4" height="4" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="4" stroke="#2a2a2a" stroke-width="1"/></pattern></defs>');
+    }
     svg.setAttribute('data-v-6523b72c', '');
     const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
     style.textContent = toothImageStyles;
