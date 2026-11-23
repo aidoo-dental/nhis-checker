@@ -1,6 +1,6 @@
 TEMPLATE = app
 TARGET = "NHIS Checker"
-VERSION = 1.0.12
+VERSION = 1.0.16
 QT += widgets network xml
 CONFIG += c++20
 # Octal space keeps this string a single argument for both moc and MSVC.
