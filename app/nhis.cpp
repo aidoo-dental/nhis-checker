@@ -161,15 +161,6 @@ QByteArray NhisClient::lookup(QWidget *parent, const DentalMessage &message, boo
                              const QString &driver, bool remember, const PatientQuery &patient) {
     const auto cleanup = qScopeGuard([&] { closeIfExpired(remember); });
     unlock(parent, driver, remember);
-    const auto result = requestDental(message, production);
-    const auto parsed = parseNhIs(result);
-    if (child(child(parsed.documentElement(), "contents"), "results").isNull())
-        return {}; // No patient records to display or export.
-    validatePatientIdentity(parsed, patient);
-    return result;
-}
-
-QByteArray NhisClient::requestDental(const DentalMessage &message, bool production) {
     const auto api = QString(production ? "https://api.his.bg" : "https://ptest-api.his.bg") + message.route;
     QByteArray signedRequest;
     try {
@@ -187,7 +178,8 @@ QByteArray NhisClient::requestDental(const DentalMessage &message, bool producti
         if (response.status != 200)
             failHttp(response.status, response.body,
                      QStringLiteral("Неуспешна дентална справка %1").arg(message.type));
-        validateDentalResponse(parseNhIs(response.body), message);
+        if (!validateDentalResponse(parseNhIs(response.body), message, patient))
+            return {};
     } catch (const std::runtime_error &error) {
         fail(QString::fromUtf8(error.what()) +
              QStringLiteral("\nЗаявка %1 · ID %2").arg(message.type, message.id));

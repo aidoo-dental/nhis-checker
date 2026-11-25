@@ -46,9 +46,9 @@ function updateLookups() {
     section.querySelector('[data-result]').hidden = !lookup.id;
     section.querySelector('[data-empty]').hidden = lookup.pending || Boolean(lookup.id);
     if (view === 'status') section.querySelector('[data-empty]').textContent = lookup.empty
-      ? 'Няма намерени лечения за изчисляване на статус.' : 'Изтегли данните, за да видиш зъбната схема.';
+      ? 'Няма намерени лечения за изчисляване на статус. Името не може да се потвърди.' : 'Изтегли данните, за да видиш зъбната схема.';
     if (view === 'treatments') section.querySelector('[data-empty]').textContent = lookup.empty
-      ? 'Няма намерени лечения.' : 'Изтегли данните, за да видиш списъка.';
+      ? 'Няма намерени лечения. Името не може да се потвърди.' : 'Изтегли данните, за да видиш списъка.';
   }
 }
 function resetResults() {

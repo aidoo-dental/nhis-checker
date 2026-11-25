@@ -60,8 +60,9 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
                 QStringLiteral("В отговора на НЗИС липсва денталният статус."),
                 QStringLiteral("НЗИС не върна записи или валиден общ брой лечения."),
                 QStringLiteral("НЗИС съобщи за намерени лечения, но не върна записи за проверка."),
-                QStringLiteral("НЗИС не върна достатъчно пациентски данни за проверка на имената и идентификатора. Справката е блокирана."),
-                QStringLiteral("Имената и идентификаторът не съвпадат с пациентските данни, върнати от НЗИС. Провери изписването. Справката е блокирана.")
+                QStringLiteral("В запис от НЗИС липсва идентификатор или тип на идентификатора. Справката е блокирана."),
+                QStringLiteral("Идентификаторът или типът му в запис от НЗИС не съвпада със заявката. Справката е блокирана."),
+                QStringLiteral("Името и фамилията не са потвърдени от нито един върнат запис. Провери изписването. Справката е блокирана.")
             };
             for (const auto &line : field("message").left(6000).split('\n')) {
                 if (details.size() < 12 && (metadata.match(line).hasMatch() || knownReasons.contains(line)))
@@ -123,8 +124,7 @@ QJsonObject Desktop::run(const QString &action, const QJsonObject &data) {
     if (action == "lookup") {
         responses.clear();
         const auto prefs = settings();
-        const PatientQuery patient{field("first"), field("middle"), field("last"),
-                                   field("identifierType"), field("identifier")};
+        const PatientQuery patient{field("first"), field("last"), field("identifierType"), field("identifier")};
         const Practice practice{prefs.value("lpk").toString(), prefs.value("practice").toString()};
         const auto request = makeDentalMessage(patient, practice);
         auto xml = client.lookup(window, request, prefs.value("environment") == "production",

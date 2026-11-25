@@ -4,7 +4,7 @@
 #include <QString>
 
 struct PatientQuery {
-    QString first, middle, last, identifierType, identifier;
+    QString first, last, identifierType, identifier;
 };
 struct Practice {
     QString lpk, registration;
@@ -21,5 +21,5 @@ QDomDocument parseNhIs(const QByteArray &xml);
 QDomElement child(const QDomElement &parent, const QString &name);
 QString value(const QDomElement &parent, const QString &name);
 QString nhisResponseError(const QDomDocument &document);
-void validateDentalResponse(const QDomDocument &document, const DentalMessage &request);
-void validatePatientIdentity(const QDomDocument &treatments, const PatientQuery &patient);
+// Returns false for a valid reply with no records.
+bool validateDentalResponse(const QDomDocument &document, const DentalMessage &request, const PatientQuery &patient);

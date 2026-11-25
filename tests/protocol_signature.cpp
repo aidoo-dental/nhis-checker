@@ -102,53 +102,52 @@ void verifySignature(const QByteArray &xml) {
     expect(documentDigest == digest(canonical(document)), "Enveloped document digest differs");
 }
 
-void verifyIdentity() {
-    const PatientQuery patient{QStringLiteral("Иван"), {}, QStringLiteral("Тестов"), "1", "0000000000"};
-    const auto subject = QStringLiteral(
-        "<subject><identifierType value=\"1\"/><identifier value=\"0000000000\"/>"
-        "<name><given value=\"Иван\"/><middle value=\"Петров\"/><family value=\"Тестов\"/></name></subject>");
-    const auto response = [](const QString &subjects) {
-        return parseNhIs((QStringLiteral("<message xmlns=\"https://www.his.bg\"><header>"
-            "<messageType value=\"D006\"/></header><contents><foundNumber value=\"1\"/>") +
-            subjects + QStringLiteral("</contents></message>")).toUtf8());
+void verifyReturnedIdentifiers() {
+    const PatientQuery patient{QStringLiteral("  ИВАН "), QStringLiteral("примеров"), "1", "0000000000"};
+    const auto request = makeDentalMessage(patient, {"012345678", "0012345678"});
+    const auto result = [](const QString &name) {
+        return QStringLiteral("<results><subject><identifierType value=\"1\"/>"
+            "<identifier value=\"0000000000\"/>") + name + "</subject></results>";
     };
-    const auto one = "<results>" + subject + "</results>";
-    validatePatientIdentity(response(one), patient);
-    auto normalized = patient;
-    normalized.first = QStringLiteral("  ИВАН  ");
-    normalized.last = QStringLiteral("тестов");
-    validatePatientIdentity(response(one), normalized);
-    normalized.middle = QStringLiteral("петров");
-    validatePatientIdentity(response(one), normalized);
-    const auto rejects = [&](const QString &xml, const PatientQuery &query) {
-        try { validatePatientIdentity(response(xml), query); }
+    const auto validate = [&](const QString &results, const char *total = "3") {
+        const auto response = QStringLiteral("<message xmlns=\"https://www.his.bg\"><header>"
+            "<messageType value=\"D006\"/><messageId value=\"") + request.id +
+            QStringLiteral("\"/></header><contents><foundNumber value=\"") + QString::fromLatin1(total) + "\"/>" +
+            results + QStringLiteral("</contents></message>");
+        return validateDentalResponse(parseNhIs(response.toUtf8()), request, patient);
+    };
+    const auto oldName = result(QStringLiteral("<name><given value=\"Иван\"/><family value=\"Тестов\"/></name>"));
+    const auto newName = result(QStringLiteral("<name><given value=\"Иван\"/><family value=\"Примеров\"/></name>"));
+    expect(validate(oldName + newName + result({})),
+           "A matching name must suffice despite missing or different names in other records");
+    expect(validate(newName, "0"), "A matching record must be accepted when the reported total differs");
+    const auto rejects = [&](const QString &xml) {
+        try { validate(xml); }
         catch (const std::runtime_error &error) {
-            expect(!QString::fromUtf8(error.what()).contains(QStringLiteral("Тестов")),
-                   "A blocked lookup must not disclose returned patient names");
+            const auto message = QString::fromUtf8(error.what());
+            expect(!message.contains("000000000") && !message.contains(QStringLiteral("Тестов")),
+                   "A blocked lookup must not disclose patient identifiers or names");
             return;
         }
-        throw std::runtime_error("Unverified patient identity was accepted");
+        throw std::runtime_error("A record with an unverified patient identifier was accepted");
     };
-    auto wrong = patient;
-    wrong.last = QStringLiteral("Тест");
-    rejects(one, wrong);
-    wrong = patient; wrong.first = QStringLiteral("Друг"); rejects(one, wrong);
-    wrong = patient; wrong.first = QStringLiteral("   "); rejects(one, wrong);
-    wrong = patient; wrong.identifier = "0000000001"; rejects(one, wrong);
-    wrong = patient; wrong.identifierType = "2"; rejects(one, wrong);
-    wrong = patient; wrong.middle = QStringLiteral("Друг"); rejects(one, wrong);
-    rejects({}, patient);
-    rejects("<results/>", patient);
-    auto missing = one; missing.replace(QStringLiteral("<given value=\"Иван\"/>"), QString());
-    rejects(missing, patient);
-    auto mismatched = one; mismatched.replace("0000000000", "0000000001");
-    rejects(one + mismatched, patient); // Every result must belong to the same named patient.
-    auto foreignNamespace = one; foreignNamespace.replace("<subject>", "<subject xmlns=\"urn:other\">");
-    rejects(foreignNamespace, patient);
+    auto wrongId = oldName;
+    wrongId.replace("0000000000", "0000000001");
+    rejects(newName + wrongId);
+    auto wrongType = oldName;
+    wrongType.replace("<identifierType value=\"1\"/>", "<identifierType value=\"2\"/>");
+    rejects(wrongType);
+    rejects(oldName);
+    rejects(result({}));
+    rejects(oldName + result(QStringLiteral("<name><given value=\"Георги\"/><family value=\"Примеров\"/></name>")));
+    rejects("<results/>");
+    auto foreignNamespace = oldName;
+    foreignNamespace.replace("<subject>", "<subject xmlns=\"urn:other\">");
+    rejects(foreignNamespace);
 }
 
 void verifyProtocol() {
-    const PatientQuery patient{QStringLiteral("Иван & Мария"), {}, QStringLiteral("Тестови"), "4", "ABC\"123"};
+    const PatientQuery patient{QStringLiteral("Иван"), QStringLiteral("Тестов"), "4", "ABC\"123"};
     const Practice practice{"012345678", "0012345678"};
     const auto treatment = makeDentalMessage(patient, practice);
     const auto status = makeDentalMessage(patient, practice);
@@ -168,20 +167,18 @@ void verifyProtocol() {
     const QByteArray response = "<?xml version=\"1.0\"?><h:message xmlns:h=\"https://www.his.bg\">"
         "<h:header><h:messageType value=\"D006\"/><h:messageId value=\"" + treatment.id.toUtf8() +
         "\"/></h:header><h:contents><h:foundNumber value=\"0\"/></h:contents></h:message>";
-    validateDentalResponse(parseNhIs(response), treatment);
-    auto inconsistentTotal = response;
-    inconsistentTotal.replace("</h:contents>", "<h:results/></h:contents>");
-    validateDentalResponse(parseNhIs(inconsistentTotal), treatment);
+    expect(!validateDentalResponse(parseNhIs(response), treatment, patient),
+           "Zero treatments must return an empty lookup");
     auto missingRecords = response;
     missingRecords.replace("foundNumber value=\"0\"", "foundNumber value=\"1\"");
     bool missingRejected = false;
     try {
-        validateDentalResponse(parseNhIs(missingRecords), treatment);
+        validateDentalResponse(parseNhIs(missingRecords), treatment, patient);
     } catch (const std::exception &) { missingRejected = true; }
     expect(missingRejected, "A nonempty total without records was accepted as an empty lookup");
     bool rejected = false;
     try {
-        validateDentalResponse(parseNhIs(response), status);
+        validateDentalResponse(parseNhIs(response), status, patient);
     } catch (const std::exception &) { rejected = true; }
     expect(rejected, "A response for a different request was accepted");
 
@@ -198,7 +195,7 @@ void verifyProtocol() {
            !errorText.contains("senderId"), "NHIS errors must retain codes and omit server text");
     rejected = false;
     try {
-        validateDentalResponse(rejection, status);
+        validateDentalResponse(rejection, status, patient);
     } catch (const std::runtime_error &error) {
         rejected = QString::fromUtf8(error.what()) == errorText;
     }
@@ -223,7 +220,7 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     try {
         verifyProtocol();
-        verifyIdentity();
+        verifyReturnedIdentifiers();
     } catch (const std::exception &error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 1;
