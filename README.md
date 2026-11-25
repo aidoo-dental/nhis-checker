@@ -14,17 +14,19 @@
 
 ## Изтегляне
 
-**Версия 1.0.12** включва фиксирани заглавия на колоните при скролиране, проверка на имената на пациента и подписани инсталатори.
+**Версия 1.0.17** подобрява проверката на пациента: идентификаторът трябва да съвпада във всички върнати записи, а името и фамилията — в поне един. При липса на лечения се показва празен резултат с уточнение, че името не може да бъде потвърдено.
 
 | Файл | За кой компютър е | Какво прави |
 | :--- | :--- | :--- |
-| [NHIS Checker 1.0.12 — Apple Silicon.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Apple.Silicon.dmg) | Mac с Apple Silicon, macOS 12.0+ | Отваря диск с приложението. Премести **NHIS Checker** в **Applications**. |
-| [NHIS Checker 1.0.12 — Intel.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Intel.dmg) | Mac с Intel, macOS 12.0+ | Същото приложение, компилирано за Intel. Премести го в **Applications**. |
-| [NHIS Checker 1.0.12 — Windows x64 Setup.exe](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.12/NHIS.Checker.1.0.12.-.Windows.x64.Setup.exe) | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
+| [NHIS Checker 1.0.17 — Apple Silicon.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.17/NHIS.Checker.1.0.17.-.Apple.Silicon.dmg) | Mac с Apple Silicon, macOS 12.0+ | Отваря диск с приложението. Премести **NHIS Checker** в **Applications**. |
+| [NHIS Checker 1.0.17 — Intel.dmg](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.17/NHIS.Checker.1.0.17.-.Intel.dmg) | Mac с Intel, macOS 12.0+ | Същото приложение, компилирано за Intel. Премести го в **Applications**. |
+| [NHIS Checker 1.0.17 — Windows x64 Setup.exe](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.17/NHIS.Checker.1.0.17.-.Windows.x64.Setup.exe) | Windows 10 1809+ или Windows 11, x64 | Инсталира приложението за текущия потребител, нужните библиотеки и пряк път в Start менюто. |
 
 На Mac провери процесора от ** → About This Mac / За този Mac**. Драйверът за КЕП трябва да съответства на архитектурата на приложението; за Windows е нужен 64-битов драйвер от доставчика.
 
 **Подписване:** Mac приложението и DMG файловете са подписани с Developer ID на **Aidoo Ltd. OOD** и нотариализирани от Apple. Windows приложението, инсталаторът и деинсталаторът са подписани чрез **Azure Artifact Signing**, с издател **Aidoo LTD** и времеви печат.
+
+[Бележки към версия 1.0.17](https://github.com/aidoo-dental/nhis-checker/releases/tag/v1.0.17) · [SHA-256 контролни суми](https://github.com/aidoo-dental/nhis-checker/releases/download/v1.0.17/SHA256SUMS-1.0.17.txt)
 
 [Всички версии и бележки към изданията →](https://github.com/aidoo-dental/nhis-checker/releases)
 
